@@ -2,7 +2,7 @@ name: Build CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, action* ]
   pull_request:
     branches: [ main ]
 
