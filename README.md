@@ -1,40 +1,32 @@
-# AgentShield 🛡️
+# 🛡️ AgentShield
 
-**The missing safety layer for AI Agents.** - A hardlink-based zero-copy backup system that protects your workspace from unintended AI modifications.
+English | [简体中文](./README_CN.md)
 
-## Features
+The missing safety layer for AI Agents - Give your AI Agent a "regret pill".
 
-- **Zero-Copy Backups**: Uses hardlinks for instant, space-efficient backups (10GB file = 1ms backup)
-- **Real-time Protection**: Watches your workspace and automatically backs up files before changes
-- **Smart Exclusions**: Automatically ignores `.git`, `node_modules`, build artifacts, etc.
-- **Atomic Exec Mode**: Snapshot entire workspace before running agent commands
-- **Easy Restore**: One command to roll back any file to its original state
-- **Single Binary**: Compile to standalone executable - no runtime dependencies
+**A hardlink-based zero-copy backup system that protects your workspace from unintended AI modifications.**
 
-## Installation
+## ✨ Features
 
-### From Source (requires Bun)
+- **⚡ Zero-Copy Backups** - Uses hardlinks for instant, space-efficient backups (10GB file = 1ms backup)
+- **🕵️ Real-time Protection** - Watches your workspace and automatically backs up files before changes
+- **📦 Smart Exclusions** - Automatically ignores `.git`, `node_modules`, build artifacts, etc.
+- **🔒 Atomic Exec Mode** - Snapshot entire workspace before running agent commands
+- **⏮️ Easy Restore** - One command to roll back any file to its original state
 
-```bash
-# Install dependencies
-bun install
+## 🚀 Installation
 
-# Run directly
-bun run src/index.ts --help
-
-# Build standalone binary
-bun run build
-```
-
-### Standalone Binary
-
-After building, you get a single `shield` binary that works without Bun or Node.js:
+### Via npm
 
 ```bash
-./shield --help
+npm install -g agentshield
 ```
 
-## Usage
+### Download Binary
+
+Download the binary for your platform from the [Releases](https://github.com/tomsun28/agentshield/releases) page (supports Windows, macOS, Linux).
+
+## 📖 Usage
 
 ### Watch Mode (Real-time Protection)
 
@@ -45,8 +37,6 @@ shield watch
 # Watch specific directory
 shield watch ./my-project
 ```
-
-Files are automatically backed up when they're about to be modified. Press `Ctrl+C` to stop.
 
 ### Exec Mode (Recommended for Agent Tasks)
 
@@ -95,77 +85,7 @@ shield clean
 shield clean --days=3
 ```
 
-### Check Status
-
-```bash
-shield status
-```
-
-## How It Works
-
-### Hardlink Magic
-
-When AgentShield backs up a file, it uses **hardlinks** instead of copying:
-
-```
-Original: /project/src/index.ts  ──┐
-                                   ├──► Same data blocks on disk
-Backup:   /.shield/123_src__index.ts ──┘
-```
-
-- **Instant**: Creating a hardlink takes ~1ms regardless of file size
-- **Zero Extra Space**: Both files point to the same data blocks
-- **Copy-on-Write**: When the original is modified, the backup retains the old content
-
-### Fallback for Cross-Partition
-
-If hardlinks fail (e.g., backup on different partition), AgentShield automatically falls back to streaming copy with a warning.
-
-## Integration Example
-
-For AI agent developers, integrate AgentShield to offer "Undo Agent Changes":
-
-```typescript
-import { spawn } from "child_process";
-
-// Before agent runs
-spawn("shield", ["snapshot", "./workspace"]);
-
-// Run your agent
-await runAgent();
-
-// Offer restore UI
-// User clicks "Undo" → spawn("shield", ["restore", "file.ts"]);
-```
-
-## Directory Structure
-
-```
-your-project/
-├── src/
-├── package.json
-└── .shield/          # Hidden vault
-    ├── index.json          # Backup index
-    └── snapshots/          # Backup files
-        ├── 1234567890_src__index.ts
-        └── 1234567891_src__utils.ts
-```
-
-## Build for Distribution
-
-```bash
-# macOS (current platform)
-bun run build
-
-# Cross-compile
-bun run build:windows  # → shield.exe
-bun run build:linux    # → shield-linux
-
-# Build all platforms
-bun run build:all
-```
-
-## Default Exclusions
+## 🔍 Default Exclusions
 
 These patterns are automatically excluded from backup:
 
@@ -177,6 +97,10 @@ These patterns are automatically excluded from backup:
 - `__pycache__/`, `*.pyc`
 - `.DS_Store`, `Thumbs.db`
 
-## License
+## 🤝 Contributing
 
-MIT
+Issues and Pull Requests are welcome!
+
+## 📄 License
+
+[Apache License 2.0](./LICENSE)

@@ -5,6 +5,8 @@ node_modules/
 shield
 shield.exe
 shield-linux
+.dist/
+/dist/index.js
 
 # Shield vault (don't commit backups)
 .shield/
