@@ -40,6 +40,9 @@
   "bugs": {
     "url": "https://github.com/tomsun28/agentshield/issues"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=18.0.0"
   },
