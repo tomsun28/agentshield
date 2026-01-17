@@ -1,6 +1,6 @@
 {
   "name": "agent-shield",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Instant file protection for AI agent operations - hardlink-based zero-copy backup system",
   "type": "module",
   "main": "src/index.ts",
@@ -23,7 +23,7 @@
     "ai-safety"
   ],
   "author": "tomsun28",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.0.0"
