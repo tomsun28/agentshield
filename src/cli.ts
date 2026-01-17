@@ -36,10 +36,10 @@ function parseArgs(args: string[]): CliOptions {
 
 function printHelp(): void {
   console.log(`
-🛡️  AgentShield - File Protection for AI Agents
+🛡️  Shield - File Protection for AI Agents
 
 Usage:
-  agent-shield <command> [options]
+  shield <command> [options]
 
 Commands:
   watch [path]           Start watching a directory (default: current dir)
@@ -56,11 +56,11 @@ Options:
   --days=<N>             For clean command: max age in days
 
 Examples:
-  agent-shield watch ./my-project
-  agent-shield exec -- npm run agent-task
-  agent-shield restore src/index.ts
-  agent-shield clean --days=3
-  agent-shield status
+  shield watch ./my-project
+  shield exec -- npm run agent-task
+  shield restore src/index.ts
+  shield clean --days=3
+  shield status
 `);
 }
 
@@ -129,8 +129,8 @@ async function cmdWatch(options: CliOptions): Promise<void> {
 async function cmdExec(options: CliOptions, rawArgv: string[]): Promise<void> {
   const dashDashIndex = rawArgv.indexOf("--");
   if (dashDashIndex === -1 || dashDashIndex === rawArgv.length - 1) {
-    console.error("Usage: agent-shield exec -- <command>");
-    console.error("Example: agent-shield exec -- npm run agent-task");
+    console.error("Usage: shield exec -- <command>");
+    console.error("Example: shield exec -- npm run agent-task");
     process.exit(1);
   }
   
@@ -140,7 +140,7 @@ async function cmdExec(options: CliOptions, rawArgv: string[]): Promise<void> {
   const config = getDefaultConfig(workspace);
   const backupManager = new BackupManager(config);
   
-  console.log("🛡️  AgentShield Exec Mode");
+  console.log("🛡️  Shield Exec Mode");
   console.log("─".repeat(50));
   
   console.log("📸 Taking pre-execution snapshot...");
@@ -165,8 +165,8 @@ async function cmdExec(options: CliOptions, rawArgv: string[]): Promise<void> {
       } else {
         console.log(`⚠ Command exited with code ${code}`);
       }
-      console.log("\n💡 To restore files, run: agent-shield restore <file>");
-      console.log("   To list all backups: agent-shield list");
+      console.log("\n💡 To restore files, run: shield restore <file>");
+      console.log("   To list all backups: shield list");
       resolve();
     });
     child.on("error", reject);
@@ -195,7 +195,7 @@ async function cmdRestore(options: CliOptions): Promise<void> {
       return;
     }
     
-    console.log("Available backups (use 'agent-shield restore <file>' to restore):\n");
+    console.log("Available backups (use 'shield restore <file>' to restore):\n");
     const uniqueFiles = new Map<string, typeof backups[0]>();
     for (const backup of backups) {
       if (!uniqueFiles.has(backup.originalPath)) {
@@ -261,7 +261,7 @@ async function cmdStatus(options: CliOptions): Promise<void> {
   
   const stats = backupManager.getStats();
   
-  console.log("📊 AgentShield Status\n");
+  console.log("📊 Shield Status\n");
   console.log(`  Workspace:      ${config.workspace}`);
   console.log(`  Vault:          ${config.vaultDir}`);
   console.log(`  Total Backups:  ${stats.totalBackups}`);

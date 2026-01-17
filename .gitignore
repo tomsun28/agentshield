@@ -2,12 +2,12 @@
 node_modules/
 
 # Build output
-agent-shield
-agent-shield.exe
-agent-shield-linux
+shield
+shield.exe
+shield-linux
 
 # Shield vault (don't commit backups)
-.agent_shield/
+.shield/
 
 # IDE
 .vscode/

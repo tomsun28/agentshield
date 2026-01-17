@@ -21,7 +21,7 @@ export class ShieldWatcher {
       return;
     }
 
-    console.log(`🚀 AgentShield started, protecting: ${this.config.workspace}`);
+    console.log(`🚀 Shield started, protecting: ${this.config.workspace}`);
     console.log(`📁 Vault location: ${this.config.vaultDir}`);
     console.log("─".repeat(50));
 
@@ -33,7 +33,7 @@ export class ShieldWatcher {
         
         const normalizedFilename = filename.replace(/\\/g, "/");
         
-        if (this.backupManager.shouldExclude(normalizedFilename)) {
+        if (normalizedFilename.startsWith(".shield") || this.backupManager.shouldExclude(normalizedFilename)) {
           return;
         }
 
@@ -73,7 +73,7 @@ export class ShieldWatcher {
       }
       this.debounceMap.clear();
       
-      console.log("AgentShield stopped");
+      console.log("Shield stopped");
     }
   }
 

@@ -8,7 +8,7 @@ export interface ShieldConfig {
   maxBackupAgeDays: number;
 }
 
-export const DEFAULT_VAULT_NAME = ".agent_shield";
+export const DEFAULT_VAULT_NAME = ".shield";
 export const SNAPSHOTS_DIR = "snapshots";
 export const INDEX_FILE = "index.json";
 
@@ -17,8 +17,8 @@ export const DEFAULT_EXCLUDE_PATTERNS = [
   ".git/**",
   "node_modules",
   "node_modules/**",
-  ".agent_shield",
-  ".agent_shield/**",
+  ".shield",
+  ".shield/**",
   "**/*.log",
   "**/*.tmp",
   "**/*.swp",

@@ -1,6 +1,6 @@
 # AgentShield 🛡️
 
-**Instant file protection for AI agent operations** - A hardlink-based zero-copy backup system that protects your codebase from unintended AI modifications.
+**The missing safety layer for AI Agents.** - A hardlink-based zero-copy backup system that protects your codebase from unintended AI modifications.
 
 ## Features
 
@@ -28,10 +28,10 @@ bun run build
 
 ### Standalone Binary
 
-After building, you get a single `agent-shield` binary that works without Bun or Node.js:
+After building, you get a single `shield` binary that works without Bun or Node.js:
 
 ```bash
-./agent-shield --help
+./shield --help
 ```
 
 ## Usage
@@ -40,10 +40,10 @@ After building, you get a single `agent-shield` binary that works without Bun or
 
 ```bash
 # Watch current directory
-agent-shield watch
+shield watch
 
 # Watch specific directory
-agent-shield watch ./my-project
+shield watch ./my-project
 ```
 
 Files are automatically backed up when they're about to be modified. Press `Ctrl+C` to stop.
@@ -52,9 +52,9 @@ Files are automatically backed up when they're about to be modified. Press `Ctrl
 
 ```bash
 # Snapshot workspace, run command, then allow easy restore
-agent-shield exec -- npm run agent-task
-agent-shield exec -- python ai_script.py
-agent-shield exec --path=./my-project -- cargo run
+shield exec -- npm run agent-task
+shield exec -- python ai_script.py
+shield exec --path=./my-project -- cargo run
 ```
 
 This mode:
@@ -66,39 +66,39 @@ This mode:
 
 ```bash
 # Take a snapshot of current directory
-agent-shield snapshot
+shield snapshot
 
 # Take a snapshot of specific directory  
-agent-shield snapshot ./my-project
+shield snapshot ./my-project
 ```
 
 ### Restore Files
 
 ```bash
 # List all available backups
-agent-shield restore
+shield restore
 
 # Restore specific file to latest backup
-agent-shield restore src/index.ts
+shield restore src/index.ts
 
 # List all backups with details
-agent-shield list
+shield list
 ```
 
 ### Cleanup Old Backups
 
 ```bash
 # Remove backups older than 7 days (default)
-agent-shield clean
+shield clean
 
 # Remove backups older than 3 days
-agent-shield clean --days=3
+shield clean --days=3
 ```
 
 ### Check Status
 
 ```bash
-agent-shield status
+shield status
 ```
 
 ## How It Works
@@ -110,7 +110,7 @@ When AgentShield backs up a file, it uses **hardlinks** instead of copying:
 ```
 Original: /project/src/index.ts  ──┐
                                    ├──► Same data blocks on disk
-Backup:   /.agent_shield/123_src__index.ts ──┘
+Backup:   /.shield/123_src__index.ts ──┘
 ```
 
 - **Instant**: Creating a hardlink takes ~1ms regardless of file size
@@ -129,13 +129,13 @@ For AI agent developers, integrate AgentShield to offer "Undo Agent Changes":
 import { spawn } from "child_process";
 
 // Before agent runs
-spawn("agent-shield", ["snapshot", "./workspace"]);
+spawn("shield", ["snapshot", "./workspace"]);
 
 // Run your agent
 await runAgent();
 
 // Offer restore UI
-// User clicks "Undo" → spawn("agent-shield", ["restore", "file.ts"]);
+// User clicks "Undo" → spawn("shield", ["restore", "file.ts"]);
 ```
 
 ## Directory Structure
@@ -144,7 +144,7 @@ await runAgent();
 your-project/
 ├── src/
 ├── package.json
-└── .agent_shield/          # Hidden vault
+└── .shield/          # Hidden vault
     ├── index.json          # Backup index
     └── snapshots/          # Backup files
         ├── 1234567890_src__index.ts
@@ -158,8 +158,8 @@ your-project/
 bun run build
 
 # Cross-compile
-bun run build:windows  # → agent-shield.exe
-bun run build:linux    # → agent-shield-linux
+bun run build:windows  # → shield.exe
+bun run build:linux    # → shield-linux
 
 # Build all platforms
 bun run build:all

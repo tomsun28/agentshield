@@ -1,6 +1,8 @@
 
 # 🛡️ AgentShield
 
+给 AI Agent 套上一层盾牌。
+
 ### 让你的 AI Agent 拥有“后悔药”
 
 **AgentShield** 是一个高性能、非侵入式的本地文件保护层。它专为 AI Agent（如 Open Interpreter, AutoDev, Claude Computer Use）设计，通过**毫秒级的硬链接快照**，确保 Agent 在任何误操作（误删、逻辑写崩、环境破坏）后，你都能一键回滚。
