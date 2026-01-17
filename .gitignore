@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+agent-shield
+agent-shield.exe
+agent-shield-linux
+
+# Shield vault (don't commit backups)
+.agent_shield/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Bun
+bun.lockb

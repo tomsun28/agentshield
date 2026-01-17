@@ -1,0 +1,31 @@
+{
+  "name": "agent-shield",
+  "version": "1.0.0",
+  "description": "Instant file protection for AI agent operations - hardlink-based zero-copy backup system",
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "shield": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build --compile ./src/index.ts --outfile shield",
+    "build:windows": "bun build --compile --target=bun-windows-x64 ./src/index.ts --outfile shield.exe",
+    "build:linux": "bun build --compile --target=bun-linux-x64 ./src/index.ts --outfile shield-linux",
+    "build:all": "bun run build && bun run build:windows && bun run build:linux"
+  },
+  "keywords": [
+    "agent",
+    "backup",
+    "protection",
+    "hardlink",
+    "rollback",
+    "ai-safety"
+  ],
+  "author": "tomsun28",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.0.0"
+  }
+}
