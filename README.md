@@ -1,6 +1,6 @@
 # AgentShield 🛡️
 
-**The missing safety layer for AI Agents.** - A hardlink-based zero-copy backup system that protects your codebase from unintended AI modifications.
+**The missing safety layer for AI Agents.** - A hardlink-based zero-copy backup system that protects your workspace from unintended AI modifications.
 
 ## Features
 

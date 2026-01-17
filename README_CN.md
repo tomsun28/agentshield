@@ -1,13 +1,10 @@
-
 # 🛡️ AgentShield
 
 给 AI Agent 套上一层盾牌。
 
 ### 让你的 AI Agent 拥有“后悔药”
 
-**AgentShield** 是一个高性能、非侵入式的本地文件保护层。它专为 AI Agent（如 Open Interpreter, AutoDev, Claude Computer Use）设计，通过**毫秒级的硬链接快照**，确保 Agent 在任何误操作（误删、逻辑写崩、环境破坏）后，你都能一键回滚。
-
----
+**AI 代理的安全防护层** - 一个基于硬链接的零拷贝备份系统，保护你的工作区免受 AI 意外修改。
 
 ## ✨ 核心特性
 
@@ -16,15 +13,18 @@
 * **回滚意图感知**：支持按时间点、按 Agent 任务 ID (Task ID) 进行原子化回滚。
 * **📦 单二进制分发**：基于 Bun 编译，无依赖，下载即用（支持 Windows, macOS, Linux）。
 * **🛡️ 安全沙盒预览**：在真正写入磁盘前，查看 Agent 产生的 Diff 差异。
-
----
+* **⚡ 零拷贝备份**：使用硬链接实现即时、节省空间的备份（10GB 文件 = 1ms 完成备份）
+* **🕵️ 实时保护**：监控工作区并在文件被修改前自动备份
+* **📦 智能排除**：自动忽略 `.git`、`node_modules`、构建产物等
+* **🔒 原子执行模式**：在运行代理命令前对整个工作区进行快照
+* **⏮️ 轻松恢复**：一个命令即可将任何文件回滚到原始状态
+* **🚀 单文件二进制**：编译为独立可执行文件 - 无需运行时依赖
 
 ## 🚀 快速开始
 
 ### 1. 安装 (Binary)
 
 ```bash
-curl -sL https://agentshield.dev/install.sh | sh
 
 ```
 
@@ -37,16 +37,52 @@ shield watch ./my-project
 
 ```
 
-### 3. 一键撤销
-
-如果 Agent 刚才的操作把代码搞乱了：
+### 3. 执行模式（推荐用于代理任务）
 
 ```bash
-shield rollback --last
-
+# 快照工作区，运行命令，然后允许轻松恢复
+shield exec -- npm run agent-task
+shield exec -- python ai_script.py
+shield exec --path=./my-project -- cargo run
 ```
 
----
+此模式会：
+1. 在命令运行前创建完整快照
+2. 执行你的代理命令
+3. 允许你轻松恢复任何修改过的文件
+
+### 4. 一次性快照
+
+```bash
+# 创建当前目录的快照
+shield snapshot
+
+# 创建指定目录的快照  
+shield snapshot ./my-project
+```
+
+### 5. 恢复文件
+
+```bash
+# 列出所有可用的备份
+shield restore
+
+# 将特定文件恢复到最新备份
+shield restore src/index.ts
+
+# 列出所有备份详情
+shield list
+```
+
+### 6. 清理旧备份
+
+```bash
+# 删除7天前的备份（默认）
+shield clean
+
+# 删除3天前的备份
+shield clean --days=3
+```
 
 ## 🛠️ 为开发者准备 (SDK)
 
@@ -64,7 +100,44 @@ await shield.commit(); // 或者在失败时调用 shield.rollback()
 
 ```
 
----
+## 📂 目录结构
+
+```
+你的项目/
+├── src/
+├── package.json
+└── .shield/          # 隐藏的备份目录
+    ├── index.json          # 备份索引
+    └── snapshots/          # 备份文件
+        ├── 1234567890_src__index.ts
+        └── 1234567891_src__utils.ts
+```
+
+## 🔧 构建与分发
+
+```bash
+# 当前平台
+bun run build
+
+# 交叉编译
+bun run build:windows  # → shield.exe
+bun run build:linux    # → shield-linux
+
+# 构建所有平台
+bun run build:all
+```
+
+## 🔍 默认排除项
+
+以下模式会自动排除在备份之外：
+
+- `.git`, `.git/**`
+- `node_modules`, `node_modules/**`
+- `*.log`, `*.tmp`, `*.swp`
+- `dist/`, `build/`, `.next/`, `.nuxt/`
+- `coverage/`, `.cache/`
+- `__pycache__/`, `*.pyc`
+- `.DS_Store`, `Thumbs.db`
 
 ## 📊 性能表现
 
@@ -74,8 +147,6 @@ await shield.commit(); // 或者在失败时调用 shield.rollback()
 | **磁盘占用 (10个版本)** | ~10GB | **~1GB (写时复制)** |
 | **CPU 开销** | 高 (Diff 计算) | **极低 (仅监听)** |
 
----
-
 ## 🗺️ 路线图 (Roadmap)
 
 * [x] 核心监听与硬链接引擎
@@ -84,8 +155,10 @@ await shield.commit(); // 或者在失败时调用 shield.rollback()
 * [ ] **语义化审计**: 利用 LLM 自动总结每一版改动了什么
 * [ ] **FUSE 虚拟层**: 实现真正的“预览后生效”模式
 
----
-
 ## 🤝 贡献与协议
 
 核心引擎采用 **Apache License 2.0** 开源。欢迎任何关于跨平台文件系统兼容性的 PR！
+
+## 📜 许可证
+
+MIT 许可证
