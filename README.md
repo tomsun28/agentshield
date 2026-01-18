@@ -28,14 +28,30 @@ Download the binary for your platform from the [Releases](https://github.com/tom
 
 ## 📖 Usage
 
-### Watch Mode (Real-time Protection)
+
+### Watch Mode (Workspace Real-time Protection)
+
+> Support background daemon mode `shield start` and foreground mode `shield watch`, choose one.
 
 ```bash
-# Watch current directory
+# Start background watch (recommended)
+shield start
+
+# Start background watch for specific directory
+shield start ./my-project
+
+# Watch current directory (foreground)
 shield watch
 
-# Watch specific directory
+# Watch specific directory (foreground)
 shield watch ./my-project
+
+# Stop background watch
+shield stop
+shield stop ./my-project
+
+# Check status
+shield status
 ```
 
 ### Exec Mode (Recommended for Agent Tasks)
@@ -75,9 +91,12 @@ shield restore src/index.ts
 shield list
 ```
 
-### Cleanup Old Backups
+### Status and Cleanup
 
 ```bash
+# Show backup statistics and daemon status
+shield status
+
 # Remove backups older than 7 days (default)
 shield clean
 
