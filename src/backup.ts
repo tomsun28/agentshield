@@ -9,8 +9,8 @@ import {
   unlinkSync
 } from "fs";
 import { join, dirname } from "path";
-import { ShieldConfig, getSnapshotsDir, getIndexPath } from "./config";
-import { matchesPattern, getAllFiles, removeEmptyDirs } from "./utils";
+import { ShieldConfig, getSnapshotsDir, getIndexPath } from "./config.js";
+import { matchesPattern, getAllFiles, removeEmptyDirs } from "./utils.js";
 
 export interface BackupEntry {
   originalPath: string;

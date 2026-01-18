@@ -1,10 +1,10 @@
 import { resolve } from "path";
 import { existsSync } from "fs";
 import { spawn } from "child_process";
-import { getDefaultConfig, ShieldConfig } from "./config";
-import { BackupManager } from "./backup";
-import { ShieldWatcher } from "./watcher";
-import { formatBytes, formatTimeAgo } from "./utils";
+import { getDefaultConfig, ShieldConfig } from "./config.js";
+import { BackupManager } from "./backup.js";
+import { ShieldWatcher } from "./watcher.js";
+import { formatBytes, formatTimeAgo } from "./utils.js";
 
 interface CliOptions {
   command: string;
