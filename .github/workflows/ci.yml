@@ -23,7 +23,12 @@ jobs:
       with:
         version: 8
         run_install: true
-      
+    
+    - name: Install Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
+    
     - name: Build
       run: pnpm run build:npm
       
