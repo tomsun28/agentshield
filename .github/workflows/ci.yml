@@ -36,4 +36,4 @@ jobs:
       run: pnpm test --if-present
       
     - name: Lint
-      run: pnpm run lint --if-present
+      run: pnpm run lint
