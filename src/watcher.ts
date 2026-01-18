@@ -1,6 +1,6 @@
 import { watch, FSWatcher } from "fs";
-import { BackupManager } from "./backup";
-import { ShieldConfig } from "./config";
+import { BackupManager } from "./backup.js";
+import { ShieldConfig } from "./config.js";
 
 export class ShieldWatcher {
   private config: ShieldConfig;
