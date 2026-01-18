@@ -6,12 +6,11 @@ import {
   statSync,
   readFileSync,
   writeFileSync,
-  readdirSync,
   unlinkSync
 } from "fs";
-import { join, dirname, relative } from "path";
+import { join, dirname } from "path";
 import { ShieldConfig, getSnapshotsDir, getIndexPath } from "./config";
-import { matchesPattern, formatBytes, getAllFiles, removeEmptyDirs, parseTimestampFromBackup, getOriginalFilename } from "./utils";
+import { matchesPattern, getAllFiles, removeEmptyDirs } from "./utils";
 
 export interface BackupEntry {
   originalPath: string;
@@ -101,13 +100,11 @@ export class BackupManager {
 
       mkdirSync(dirname(backupPath), { recursive: true });
 
-      let usedHardlink = false;
       if (forceFullCopy) {
         copyFileSync(fullPath, backupPath);
       } else {
         try {
           linkSync(fullPath, backupPath);
-          usedHardlink = true;
         } catch (err) {
           copyFileSync(fullPath, backupPath);
         }

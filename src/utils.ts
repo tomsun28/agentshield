@@ -1,4 +1,4 @@
-import { statSync, readdirSync, unlinkSync, rmdirSync } from "fs";
+import { readdirSync, rmdirSync } from "fs";
 import { join, relative } from "path";
 
 export function formatBytes(bytes: number): string {
