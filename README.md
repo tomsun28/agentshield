@@ -2,9 +2,9 @@
 
 English | [中文](./README_CN.md)
 
-**The missing safety layer for Claude Code, Cowork, OpenCode, Eigent AI Agents - Give you a "regret pill".**
+**The missing safety layer for Claude Code, Cowork, OpenCode and all AI Agents - Your "regret pill" for AI-assisted development.**
 
-A workspace history version management tool that protects your workspace from unintended AI modifications.
+A workspace history version management tool that protects your workspace from unintended AI Agent modifications.
 
 ## ✨ Features
 

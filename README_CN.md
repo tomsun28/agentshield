@@ -2,9 +2,9 @@
 
 [English](./README.md) | 中文
 
-**给 Claude Code, Cowork, OpenCode, Eigent 等 AI Agent 套上一层盾牌 - 让你拥有"后悔药"。**
+**给 Claude Code, Cowork, OpenCode, Eigent 等所有 AI Agent 套上一层盾牌 - 让你拥有"后悔药"。**
 
-一个工作区历史版本管理工具，保护你的工作区免受 AI 意外修改。
+一个工作区历史版本管理工具，保护你的工作区免受 AI Agent 意外修改。
 
 ## ✨ 核心特性
 
