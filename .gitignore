@@ -6,6 +6,7 @@ shield
 shield.exe
 shield-linux
 dist/
+releases/
 
 # Shield vault (don't commit backups)
 .shield/
