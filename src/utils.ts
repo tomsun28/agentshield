@@ -41,7 +41,7 @@ export function matchesPattern(filePath: string, patterns: string[]): boolean {
 }
 
 function patternToRegex(pattern: string): RegExp {
-  let regex = pattern
+  const regex = pattern
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
     .replace(/\*\*\//g, "{{GLOBSTAR_SLASH}}")
     .replace(/\*\*/g, "{{GLOBSTAR}}")
