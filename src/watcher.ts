@@ -2,27 +2,31 @@ import { watch, FSWatcher } from "fs";
 import { BackupManager } from "./backup.js";
 import { ShieldConfig } from "./config.js";
 
+export type LogFn = (message: string) => void;
+
 export class ShieldWatcher {
   private config: ShieldConfig;
   private backupManager: BackupManager;
   private watcher: FSWatcher | null = null;
   private debounceMap: Map<string, NodeJS.Timeout> = new Map();
   private debounceMs: number = 1000;
+  private log: LogFn;
 
-  constructor(config: ShieldConfig, backupManager: BackupManager) {
+  constructor(config: ShieldConfig, backupManager: BackupManager, log?: LogFn) {
     this.config = config;
     this.backupManager = backupManager;
+    this.log = log || console.log;
   }
 
   start(): void {
     if (this.watcher) {
-      console.log("Watcher already running");
+      this.log("Watcher already running");
       return;
     }
 
-    console.log(`🚀 Shield started, protecting: ${this.config.workspace}`);
-    console.log(`📁 Vault location: ${this.config.vaultDir}`);
-    console.log("─".repeat(50));
+    this.log(`🚀 Shield started, protecting: ${this.config.workspace}`);
+    this.log(`📁 Vault location: ${this.config.vaultDir}`);
+    this.log("─".repeat(50));
 
     this.watcher = watch(
       this.config.workspace,
@@ -51,14 +55,14 @@ export class ShieldWatcher {
     );
 
     this.watcher.on("error", (err) => {
-      console.error("Watcher error:", err);
+      this.log(`Watcher error: ${err.message}`);
     });
   }
 
   private handleFileChange(relativePath: string): void {
     const entry = this.backupManager.backupFile(relativePath);
     if (entry) {
-      console.log(`[🛡️ Shield] Original version locked: ${relativePath}`);
+      this.log(`[🛡️ Shield] Original version locked: ${relativePath}`);
     }
   }
 
@@ -72,13 +76,13 @@ export class ShieldWatcher {
       }
       this.debounceMap.clear();
       
-      console.log("Shield stopped");
+      this.log("Shield stopped");
     }
   }
 
   resetSession(): void {
     this.backupManager.resetSession();
-    console.log("─".repeat(50));
-    console.log("🔄 New session started, protection state reset");
+    this.log("─".repeat(50));
+    this.log("🔄 New session started, protection state reset");
   }
 }
