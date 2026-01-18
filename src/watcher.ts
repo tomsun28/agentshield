@@ -7,7 +7,7 @@ export class ShieldWatcher {
   private backupManager: BackupManager;
   private watcher: FSWatcher | null = null;
   private debounceMap: Map<string, NodeJS.Timeout> = new Map();
-  private debounceMs: number = 50;
+  private debounceMs: number = 1000;
 
   constructor(config: ShieldConfig, backupManager: BackupManager) {
     this.config = config;

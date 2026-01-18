@@ -1,10 +1,10 @@
 # 🛡️ AgentShield
 
-English | [简体中文](./README_CN.md)
+English | [中文](./README_CN.md)
 
-The missing safety layer for AI Agents - Give your AI Agent a "regret pill".
+**The missing safety layer for AI Agents - Give your AI Agent a "regret pill".**
 
-**A hardlink-based zero-copy backup system that protects your workspace from unintended AI modifications.**
+A hardlink-based zero-copy backup tool that protects your workspace from unintended AI modifications.
 
 ## ✨ Features
 
