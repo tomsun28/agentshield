@@ -19,11 +19,13 @@ export class ShieldWatcher {
   private log: LogFn;
   private trackedFiles: Map<string, TrackedFile> = new Map();
   private pendingRenames: Map<string, { content: Buffer; timestamp: number }> = new Map();
+  private restoreLockPath: string;
 
   constructor(config: ShieldConfig, backupManager: BackupManager, log?: LogFn) {
     this.config = config;
     this.backupManager = backupManager;
     this.log = log || console.log;
+    this.restoreLockPath = join(this.config.vaultDir, "restore.lock");
   }
 
   start(): void {
@@ -41,6 +43,10 @@ export class ShieldWatcher {
       { recursive: true },
       (event, filename) => {
         if (!filename) return;
+
+        if (existsSync(this.restoreLockPath)) {
+          return;
+        }
         
         const normalizedFilename = filename.replace(/\\/g, "/");
         

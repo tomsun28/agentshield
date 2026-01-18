@@ -233,6 +233,7 @@ async function cmdRestore(options: CliOptions): Promise<void> {
   
   const config = getDefaultConfig(workspace);
   const backupManager = new BackupManager(config);
+  const restoreLockPath = join(config.vaultDir, "restore.lock");
   
   const fileFlag = options.flags["file"] as string | undefined;
   const timeFlag = options.flags["time"] as string | undefined;
@@ -243,50 +244,62 @@ async function cmdRestore(options: CliOptions): Promise<void> {
     return;
   }
 
-  if (fileFlag && timeFlag) {
-    const timestamp = parseInt(timeFlag, 10);
-    if (isNaN(timestamp)) {
-      console.error(`Error: Invalid timestamp: ${timeFlag}`);
-      process.exit(1);
-    }
-    console.log(`🔄 Restoring file '${fileFlag}' to timestamp ${timestamp}...`);
-    const success = backupManager.restoreFileToTime(fileFlag, timestamp);
-    if (success) {
-      console.log(`✓ Restored: ${fileFlag} to version at ${new Date(timestamp).toISOString()}`);
-    } else {
-      console.log(`✗ Failed to restore: ${fileFlag}`);
-      process.exit(1);
-    }
-    return;
-  }
+  try {
+    writeFileSync(restoreLockPath, `${Date.now()}`);
 
-  if (fileFlag) {
-    console.log(`🔄 Restoring file: ${fileFlag}`);
-    const success = backupManager.restoreLatest(fileFlag);
-    if (success) {
-      console.log(`✓ Restored: ${fileFlag}`);
-    } else {
-      console.log(`✗ Failed to restore: ${fileFlag}`);
-      process.exit(1);
+    if (fileFlag && timeFlag) {
+      const timestamp = parseInt(timeFlag, 10);
+      if (isNaN(timestamp)) {
+        console.error(`Error: Invalid timestamp: ${timeFlag}`);
+        process.exit(1);
+      }
+      console.log(`🔄 Restoring file '${fileFlag}' to timestamp ${timestamp}...`);
+      const success = backupManager.restoreFileToTime(fileFlag, timestamp);
+      if (success) {
+        console.log(`✓ Restored: ${fileFlag} to version at ${new Date(timestamp).toISOString()}`);
+      } else {
+        console.log(`✗ Failed to restore: ${fileFlag}`);
+        process.exit(1);
+      }
+      return;
     }
-    return;
-  }
 
-  if (timeFlag) {
-    const timestamp = parseInt(timeFlag, 10);
-    if (isNaN(timestamp)) {
-      console.error(`Error: Invalid timestamp: ${timeFlag}`);
-      process.exit(1);
+    if (fileFlag) {
+      console.log(`🔄 Restoring file: ${fileFlag}`);
+      const success = backupManager.restoreLatest(fileFlag);
+      if (success) {
+        console.log(`✓ Restored: ${fileFlag}`);
+      } else {
+        console.log(`✗ Failed to restore: ${fileFlag}`);
+        process.exit(1);
+      }
+      return;
     }
-    console.log(`🔄 Restoring all files to timestamp ${timestamp} (${new Date(timestamp).toISOString()})...`);
-    const result = backupManager.restoreToTime(timestamp);
+
+    if (timeFlag) {
+      const timestamp = parseInt(timeFlag, 10);
+      if (isNaN(timestamp)) {
+        console.error(`Error: Invalid timestamp: ${timeFlag}`);
+        process.exit(1);
+      }
+      console.log(`🔄 Restoring all files to timestamp ${timestamp} (${new Date(timestamp).toISOString()})...`);
+      const result = backupManager.restoreToTime(timestamp);
+      console.log(`✓ Restored ${result.restored} files, ${result.failed} failed, ${result.deleted} cleaned`);
+      return;
+    }
+
+    console.log("🔄 Restoring all files to most recent backup...");
+    const result = backupManager.restoreAllLatest();
     console.log(`✓ Restored ${result.restored} files, ${result.failed} failed, ${result.deleted} cleaned`);
-    return;
+  } finally {
+    try {
+      if (existsSync(restoreLockPath)) {
+        unlinkSync(restoreLockPath);
+      }
+    } catch {
+      // ignore
+    }
   }
-
-  console.log("🔄 Restoring all files to most recent backup...");
-  const result = backupManager.restoreAllLatest();
-  console.log(`✓ Restored ${result.restored} files, ${result.failed} failed, ${result.deleted} cleaned`);
 }
 
 async function cmdList(options: CliOptions): Promise<void> {
