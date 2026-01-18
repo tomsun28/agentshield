@@ -1,6 +1,6 @@
 {
   "name": "agentshield",
-  "version": "0.0.2",
+  "version": "0.0.3.beat.0",
   "description": "Instant file protection for AI agent operations - hardlink-based zero-copy backup system",
   "type": "module",
   "main": "dist/index.js",
