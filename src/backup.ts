@@ -12,12 +12,16 @@ import { join, dirname } from "path";
 import { ShieldConfig, getSnapshotsDir, getIndexPath } from "./config.js";
 import { matchesPattern, getAllFiles, removeEmptyDirs } from "./utils.js";
 
+export type FileEventType = "change" | "delete" | "rename";
+
 export interface BackupEntry {
   originalPath: string;
   backupPath: string;
   timestamp: number;
   size: number;
   sessionId: string;
+  eventType?: FileEventType;
+  renamedFrom?: string;
 }
 
 export interface BackupIndex {
@@ -72,7 +76,12 @@ export class BackupManager {
     return matchesPattern(filePath, this.config.excludePatterns);
   }
 
-  backupFile(relativePath: string, forceFullCopy: boolean = false): BackupEntry | null {
+  backupFile(
+    relativePath: string, 
+    forceFullCopy: boolean = false,
+    eventType: FileEventType = "change",
+    renamedFrom?: string
+  ): BackupEntry | null {
     const fullPath = join(this.config.workspace, relativePath);
     
     if (this.shouldExclude(relativePath)) {
@@ -116,6 +125,8 @@ export class BackupManager {
         timestamp,
         size: stats.size,
         sessionId: this.currentSessionId,
+        eventType,
+        renamedFrom,
       };
 
       this.index.entries.push(entry);
@@ -125,6 +136,39 @@ export class BackupManager {
       return entry;
     } catch (err) {
       console.error(`Failed to backup ${relativePath}:`, err);
+      return null;
+    }
+  }
+
+  backupDeletedFile(relativePath: string, content: Buffer): BackupEntry | null {
+    if (this.shouldExclude(relativePath)) {
+      return null;
+    }
+
+    try {
+      const timestamp = Date.now();
+      const safeFilename = relativePath.replace(/[/\\]/g, "__");
+      const backupFilename = `${timestamp}_${safeFilename}`;
+      const backupPath = join(this.snapshotsDir, backupFilename);
+
+      mkdirSync(dirname(backupPath), { recursive: true });
+      writeFileSync(backupPath, content);
+
+      const entry: BackupEntry = {
+        originalPath: relativePath,
+        backupPath: backupFilename,
+        timestamp,
+        size: content.length,
+        sessionId: this.currentSessionId,
+        eventType: "delete",
+      };
+
+      this.index.entries.push(entry);
+      this.saveIndex();
+
+      return entry;
+    } catch (err) {
+      console.error(`Failed to backup deleted file ${relativePath}:`, err);
       return null;
     }
   }
@@ -198,6 +242,142 @@ export class BackupManager {
       return false;
     }
     return this.restoreFile(backups[0]);
+  }
+
+  restoreAllLatest(): { restored: number; failed: number; deleted: number } {
+    const latestByFile = new Map<string, BackupEntry>();
+    
+    for (const entry of this.index.entries) {
+      const existing = latestByFile.get(entry.originalPath);
+      if (!existing || entry.timestamp > existing.timestamp) {
+        latestByFile.set(entry.originalPath, entry);
+      }
+    }
+
+    let restored = 0;
+    let failed = 0;
+    let deleted = 0;
+
+    for (const entry of latestByFile.values()) {
+      if (entry.eventType === "delete") {
+        const targetPath = join(this.config.workspace, entry.originalPath);
+        if (existsSync(targetPath)) {
+          try {
+            unlinkSync(targetPath);
+            deleted++;
+          } catch {
+            // ignore
+          }
+        }
+        if (this.restoreFile(entry)) {
+          restored++;
+        } else {
+          failed++;
+        }
+      } else if (entry.eventType === "rename" && entry.renamedFrom) {
+        const currentPath = join(this.config.workspace, entry.originalPath);
+        if (existsSync(currentPath)) {
+          try {
+            unlinkSync(currentPath);
+            deleted++;
+          } catch {
+            // ignore
+          }
+        }
+        if (this.restoreFile(entry)) {
+          restored++;
+        } else {
+          failed++;
+        }
+      } else {
+        if (this.restoreFile(entry)) {
+          restored++;
+        } else {
+          failed++;
+        }
+      }
+    }
+
+    return { restored, failed, deleted };
+  }
+
+  restoreToTime(targetTimestamp: number): { restored: number; failed: number; deleted: number } {
+    const entriesBeforeTime = this.index.entries
+      .filter(e => e.timestamp <= targetTimestamp)
+      .sort((a, b) => b.timestamp - a.timestamp);
+
+    const latestByFile = new Map<string, BackupEntry>();
+    for (const entry of entriesBeforeTime) {
+      if (!latestByFile.has(entry.originalPath)) {
+        latestByFile.set(entry.originalPath, entry);
+      }
+    }
+
+    let restored = 0;
+    let failed = 0;
+    let deleted = 0;
+
+    for (const entry of latestByFile.values()) {
+      if (entry.eventType === "delete") {
+        const targetPath = join(this.config.workspace, entry.originalPath);
+        if (existsSync(targetPath)) {
+          try {
+            unlinkSync(targetPath);
+            deleted++;
+          } catch {
+            // ignore
+          }
+        }
+        if (this.restoreFile(entry)) {
+          restored++;
+        } else {
+          failed++;
+        }
+      } else if (entry.eventType === "rename" && entry.renamedFrom) {
+        const currentPath = join(this.config.workspace, entry.originalPath);
+        if (existsSync(currentPath)) {
+          try {
+            unlinkSync(currentPath);
+            deleted++;
+          } catch {
+            // ignore
+          }
+        }
+        if (this.restoreFile(entry)) {
+          restored++;
+        } else {
+          failed++;
+        }
+      } else {
+        if (this.restoreFile(entry)) {
+          restored++;
+        } else {
+          failed++;
+        }
+      }
+    }
+
+    return { restored, failed, deleted };
+  }
+
+  restoreFileToTime(relativePath: string, targetTimestamp: number): boolean {
+    const backups = this.getBackupsForFile(relativePath)
+      .filter(e => e.timestamp <= targetTimestamp);
+    
+    if (backups.length === 0) {
+      console.error(`No backups found for: ${relativePath} at or before timestamp ${targetTimestamp}`);
+      return false;
+    }
+    return this.restoreFile(backups[0]);
+  }
+
+  getBackupByTimestamp(timestamp: number): BackupEntry | null {
+    return this.index.entries.find(e => e.timestamp === timestamp) || null;
+  }
+
+  getUniqueTimestamps(): number[] {
+    const timestamps = new Set(this.index.entries.map(e => e.timestamp));
+    return Array.from(timestamps).sort((a, b) => b - a);
   }
 
   restoreSession(sessionId: string): { restored: number; failed: number } {

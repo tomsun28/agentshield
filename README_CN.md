@@ -80,15 +80,35 @@ shield snapshot ./my-project
 ### 恢复文件
 
 ```bash
-# 列出所有可用的备份
+# 列出所有备份及时间戳（用于 --time 选项）
+shield list
+
+# 恢复所有文件到最近的备份
 shield restore
 
-# 将特定文件恢复到最新备份
-shield restore src/index.ts
+# 仅恢复特定文件到其最新备份
+shield restore --file=src/index.ts
 
-# 列出所有备份详情
+# 恢复所有文件到特定时间戳
+shield restore --time=1737216000000
+
+# 恢复特定文件到特定时间戳
+shield restore --file=src/index.ts --time=1737216000000
+```
+
+### 列出备份
+
+```bash
+# 列出所有备份详情，包括时间戳
 shield list
 ```
+
+`list` 命令显示：
+- 文件路径及事件类型图标（📄 修改、🗑️ 删除、📝 重命名）
+- 相对时间和文件大小
+- 精确时间戳（用于 `--time` 选项）
+- ISO 日期字符串
+- 重命名历史（如适用）
 
 ### 状态和清理
 
