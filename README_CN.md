@@ -85,18 +85,6 @@ shield clean
 shield clean --days=3
 ```
 
-## 🔍 默认排除项
-
-以下模式会自动排除在备份之外：
-
-- `.git`, `.git/**`
-- `node_modules`, `node_modules/**`
-- `*.log`, `*.tmp`, `*.swp`
-- `dist/`, `build/`, `.next/`, `.nuxt/`
-- `coverage/`, `.cache/`
-- `__pycache__/`, `*.pyc`
-- `.DS_Store`, `Thumbs.db`
-
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！

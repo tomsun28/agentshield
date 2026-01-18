@@ -183,7 +183,15 @@ async function cmdSnapshot(options: CliOptions): Promise<void> {
 }
 
 async function cmdRestore(options: CliOptions): Promise<void> {
-  const config = await getConfig(options);
+  const pathArg = (options.flags["path"] as string) || ".";
+  const workspace = resolve(pathArg);
+  
+  if (!existsSync(workspace)) {
+    console.error(`Error: Directory not found: ${workspace}`);
+    process.exit(1);
+  }
+  
+  const config = getDefaultConfig(workspace);
   const backupManager = new BackupManager(config);
   
   const fileArg = options.args[0];
