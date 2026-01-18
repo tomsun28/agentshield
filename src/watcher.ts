@@ -1,5 +1,4 @@
 import { watch, FSWatcher } from "fs";
-import { join, relative } from "path";
 import { BackupManager } from "./backup";
 import { ShieldConfig } from "./config";
 

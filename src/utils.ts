@@ -1,4 +1,4 @@
-import { statSync, readdirSync, unlinkSync, rmdirSync } from "fs";
+import { readdirSync, rmdirSync } from "fs";
 import { join, relative } from "path";
 
 export function formatBytes(bytes: number): string {
@@ -41,12 +41,14 @@ export function matchesPattern(filePath: string, patterns: string[]): boolean {
 }
 
 function patternToRegex(pattern: string): RegExp {
-  let regex = pattern
+  const regex = pattern
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*\*\//g, "{{GLOBSTAR_SLASH}}")
     .replace(/\*\*/g, "{{GLOBSTAR}}")
     .replace(/\*/g, "[^/]*")
+    .replace(/{{GLOBSTAR_SLASH}}/g, "(.*/)?" )
     .replace(/{{GLOBSTAR}}/g, ".*");
-  return new RegExp(`(^|/)${regex}($|/)`);
+  return new RegExp(`(^|/)${regex}($|/|$)`);
 }
 
 export function getAllFiles(dir: string, baseDir: string = dir): string[] {

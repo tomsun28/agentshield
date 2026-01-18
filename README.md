@@ -85,18 +85,6 @@ shield clean
 shield clean --days=3
 ```
 
-## 🔍 Default Exclusions
-
-These patterns are automatically excluded from backup:
-
-- `.git`, `.git/**`
-- `node_modules`, `node_modules/**`
-- `*.log`, `*.tmp`, `*.swp`
-- `dist/`, `build/`, `.next/`, `.nuxt/`
-- `coverage/`, `.cache/`
-- `__pycache__/`, `*.pyc`
-- `.DS_Store`, `Thumbs.db`
-
 ## 🤝 Contributing
 
 Issues and Pull Requests are welcome!

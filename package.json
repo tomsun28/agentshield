@@ -20,7 +20,9 @@
     "build:bin:windows": "bun build --compile --target=bun-windows-x64 ./src/index.ts --outfile shield.exe",
     "build:bin:linux": "bun build --compile --target=bun-linux-x64 ./src/index.ts --outfile shield-linux",
     "build:bin:all": "bun run build:bin && bun run build:bin:windows && bun run build:bin:linux",
-    "prepublishOnly": "bun run build:npm"
+    "prepublishOnly": "bun run build:npm",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix"
   },
   "keywords": [
     "agent",
@@ -48,6 +50,20 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.45.0",
     "typescript": "^5.0.0"
+  },
+  "eslintConfig": {
+    "root": true,
+    "parser": "@typescript-eslint/parser",
+    "plugins": [
+      "@typescript-eslint"
+    ],
+    "extends": [
+      "eslint:recommended",
+      "plugin:@typescript-eslint/recommended"
+    ]
   }
 }
