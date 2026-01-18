@@ -2,9 +2,9 @@
 
 English | [中文](./README_CN.md)
 
-**The missing safety layer for AI Agents - Give your AI Agent a "regret pill".**
+**The missing safety layer for Claude Code, Cowork, OpenCode, Eigent AI Agents - Give you a "regret pill".**
 
-A hardlink-based zero-copy backup tool that protects your workspace from unintended AI modifications.
+A workspace history version management tool that protects your workspace from unintended AI modifications.
 
 ## ✨ Features
 
@@ -87,7 +87,7 @@ shield clean --days=3
 
 ## 🤝 Contributing
 
-Issues and Pull Requests are welcome!
+Issues and Pull Requests are very welcome!
 
 ## 📄 License
 
