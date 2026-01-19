@@ -47,20 +47,30 @@ Commands:
   stop [path]            Stop background watching
   exec <command>         Snapshot workspace, run command, then allow restore
   snapshot [path]        Take a one-time snapshot of all files
-  restore [file]         Restore a file to its backed-up version
-  list                   List all backups
+  restore                Restore all files to most recent backup
+  list                   List all backups with timestamps
   clean [--days=N]       Remove backups older than N days (default: 7)
   status                 Show backup statistics
   help                   Show this help message
 
+Restore Options:
+  shield restore                    Restore all files to most recent backup
+  shield restore --file=<path>      Restore only a specific file
+  shield restore --time=<timestamp> Restore all files to a specific time
+
 Options:
   --path=<dir>           Specify workspace directory
   --days=<N>             For clean command: max age in days
+  --file=<path>          For restore: restore specific file only
+  --time=<timestamp>     For restore: restore to specific timestamp
 
 Examples:
   shield watch ./my-project
   shield exec -- npm run agent-task
-  shield restore src/index.ts
+  shield restore
+  shield restore --file=src/index.ts
+  shield restore --time=1737216000000
+  shield list
   shield clean --days=3
   shield status
 `);
@@ -223,37 +233,72 @@ async function cmdRestore(options: CliOptions): Promise<void> {
   
   const config = getDefaultConfig(workspace);
   const backupManager = new BackupManager(config);
+  const restoreLockPath = join(config.vaultDir, "restore.lock");
   
-  const fileArg = options.args[0];
+  const fileFlag = options.flags["file"] as string | undefined;
+  const timeFlag = options.flags["time"] as string | undefined;
   
-  if (!fileArg) {
-    const backups = backupManager.getAllBackups();
-    if (backups.length === 0) {
-      console.log("No backups available");
-      return;
-    }
-    
-    console.log("Available backups (use 'shield restore <file>' to restore):\n");
-    const uniqueFiles = new Map<string, typeof backups[0]>();
-    for (const backup of backups) {
-      if (!uniqueFiles.has(backup.originalPath)) {
-        uniqueFiles.set(backup.originalPath, backup);
-      }
-    }
-    
-    for (const [path, backup] of uniqueFiles) {
-      console.log(`  ${path} (${formatTimeAgo(backup.timestamp)})`);
-    }
+  const backups = backupManager.getAllBackups();
+  if (backups.length === 0) {
+    console.log("No backups available");
     return;
   }
-  
-  console.log(`🔄 Restoring: ${fileArg}`);
-  const success = backupManager.restoreLatest(fileArg);
-  if (success) {
-    console.log(`✓ Restored: ${fileArg}`);
-  } else {
-    console.log(`✗ Failed to restore: ${fileArg}`);
-    process.exit(1);
+
+  try {
+    writeFileSync(restoreLockPath, `${Date.now()}`);
+
+    if (fileFlag && timeFlag) {
+      const timestamp = parseInt(timeFlag, 10);
+      if (isNaN(timestamp)) {
+        console.error(`Error: Invalid timestamp: ${timeFlag}`);
+        process.exit(1);
+      }
+      console.log(`🔄 Restoring file '${fileFlag}' to timestamp ${timestamp}...`);
+      const success = backupManager.restoreFileToTime(fileFlag, timestamp);
+      if (success) {
+        console.log(`✓ Restored: ${fileFlag} to version at ${new Date(timestamp).toISOString()}`);
+      } else {
+        console.log(`✗ Failed to restore: ${fileFlag}`);
+        process.exit(1);
+      }
+      return;
+    }
+
+    if (fileFlag) {
+      console.log(`🔄 Restoring file: ${fileFlag}`);
+      const success = backupManager.restoreLatest(fileFlag);
+      if (success) {
+        console.log(`✓ Restored: ${fileFlag}`);
+      } else {
+        console.log(`✗ Failed to restore: ${fileFlag}`);
+        process.exit(1);
+      }
+      return;
+    }
+
+    if (timeFlag) {
+      const timestamp = parseInt(timeFlag, 10);
+      if (isNaN(timestamp)) {
+        console.error(`Error: Invalid timestamp: ${timeFlag}`);
+        process.exit(1);
+      }
+      console.log(`🔄 Restoring all files to timestamp ${timestamp} (${new Date(timestamp).toISOString()})...`);
+      const result = backupManager.restoreToTime(timestamp);
+      console.log(`✓ Restored ${result.restored} files, ${result.failed} failed, ${result.deleted} cleaned`);
+      return;
+    }
+
+    console.log("🔄 Restoring all files to most recent backup...");
+    const result = backupManager.restoreAllLatest();
+    console.log(`✓ Restored ${result.restored} files, ${result.failed} failed, ${result.deleted} cleaned`);
+  } finally {
+    try {
+      if (existsSync(restoreLockPath)) {
+        unlinkSync(restoreLockPath);
+      }
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -269,17 +314,25 @@ async function cmdList(options: CliOptions): Promise<void> {
   }
   
   console.log(`📋 All Backups (${backups.length} total)\n`);
+  console.log("  Use 'shield restore --time=<timestamp>' to restore to a specific time\n");
   
   for (const backup of backups.slice(0, 50)) {
     const timeStr = formatTimeAgo(backup.timestamp);
     const sizeStr = formatBytes(backup.size);
-    console.log(`  ${backup.originalPath}`);
-    console.log(`    └─ ${timeStr} | ${sizeStr}`);
+    const dateStr = new Date(backup.timestamp).toISOString();
+    const eventType = backup.eventType || "change";
+    const eventIcon = eventType === "delete" ? "🗑️" : eventType === "rename" ? "📝" : "📄";
+    
+    console.log(`  ${eventIcon} ${backup.originalPath}`);
+    console.log(`    └─ ${timeStr} | ${sizeStr} | timestamp: ${backup.timestamp}`);
+    console.log(`       ${dateStr}${backup.renamedTo ? ` (renamed to: ${backup.renamedTo})` : ""}`);
   }
   
   if (backups.length > 50) {
     console.log(`\n  ... and ${backups.length - 50} more`);
   }
+  
+  console.log("\n📌 Legend: 📄 changed | 🗑️ deleted | 📝 renamed");
 }
 
 async function cmdClean(options: CliOptions): Promise<void> {

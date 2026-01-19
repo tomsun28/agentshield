@@ -81,15 +81,35 @@ shield snapshot ./my-project
 ### Restore Files
 
 ```bash
-# List all available backups
+# List all backups with timestamps (use for --time option)
+shield list
+# Restore all files to most recent backup
 shield restore
 
-# Restore specific file to latest backup
-shield restore src/index.ts
+# Restore only a specific file to its latest backup
+shield restore --file=src/index.ts
 
-# List all backups with details
+# Restore all files to a specific timestamp
+shield restore --time=1737216000000
+
+# Restore a specific file to a specific timestamp
+shield restore --file=src/index.ts --time=1737216000000
+
+```
+
+### List Backups
+
+```bash
+# List all backups with details including timestamps
 shield list
 ```
+
+The `list` command shows:
+- File path with event type icon (📄 changed, 🗑️ deleted, 📝 renamed)
+- Time ago and file size
+- Exact timestamp (for use with `--time` option)
+- ISO date string
+- Rename history (if applicable)
 
 ### Status and Cleanup
 
