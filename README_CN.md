@@ -22,9 +22,13 @@
 npm install -g agentshield
 ```
 
-### 下载二进制文件
+### 二进制文件安装
 
-从 [Releases](https://github.com/tomsun28/agentshield/releases) 页面下载对应平台的二进制文件（支持 Windows, macOS, Linux）。
+```bash
+curl -fsSL https://github.com/tomsun28/agentshield/raw/main/install.sh | bash
+```
+
+或者从 [Releases](https://github.com/tomsun28/agentshield/releases) 页面下载对应平台的二进制可执行文件（支持 Windows, macOS, Linux）。
 
 ## 📖 使用方法
 

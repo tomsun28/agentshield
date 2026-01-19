@@ -24,7 +24,11 @@ npm install -g agentshield
 
 ### Download Binary
 
-Download the binary for your platform from the [Releases](https://github.com/tomsun28/agentshield/releases) page (supports Windows, macOS, Linux).
+```bash
+curl -fsSL https://github.com/tomsun28/agentshield/raw/main/install.sh | bash
+```
+
+Or download the executable binary for your platform from the [Releases](https://github.com/tomsun28/agentshield/releases) page (supports Windows, macOS, Linux).
 
 ## 📖 Usage
 
