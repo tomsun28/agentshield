@@ -466,7 +466,15 @@ async function cmdStart(options: CliOptions): Promise<void> {
   
   const isWindows = process.platform === "win32";
   
-  const child = spawn(process.execPath, [scriptPath, ...args], {
+  // Detect if running as a compiled binary (bun build --compile)
+  // In bun compiled binary: process.argv[1] is a virtual path like /$bunfs/root/...
+  // or process.execPath and process.argv[1] resolve to the same file
+  const isCompiledBinary = scriptPath.startsWith("/$bunfs/") || 
+    resolve(process.execPath) === resolve(scriptPath);
+  
+  const spawnArgs = isCompiledBinary ? args : [scriptPath, ...args];
+  
+  const child = spawn(process.execPath, spawnArgs, {
     detached: true,
     stdio: "ignore",
     cwd: config.workspace,
