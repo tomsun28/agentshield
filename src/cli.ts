@@ -325,7 +325,7 @@ async function cmdList(options: CliOptions): Promise<void> {
     
     console.log(`  ${eventIcon} ${backup.originalPath}`);
     console.log(`    └─ ${timeStr} | ${sizeStr} | timestamp: ${backup.timestamp}`);
-    console.log(`       ${dateStr}${backup.renamedFrom ? ` (renamed from: ${backup.renamedFrom})` : ""}`);
+    console.log(`       ${dateStr}${backup.renamedTo ? ` (renamed to: ${backup.renamedTo})` : ""}`);
   }
   
   if (backups.length > 50) {

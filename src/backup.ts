@@ -22,6 +22,7 @@ export interface BackupEntry {
   sessionId: string;
   eventType?: FileEventType;
   renamedFrom?: string;
+  renamedTo?: string;
 }
 
 export interface BackupIndex {
@@ -173,6 +174,61 @@ export class BackupManager {
     }
   }
 
+  backupRenamedFile(oldPath: string, newPath: string, content: Buffer): BackupEntry | null {
+    if (this.shouldExclude(oldPath)) {
+      return null;
+    }
+
+    try {
+      const timestamp = Date.now();
+      const safeFilename = oldPath.replace(/[/\\]/g, "__");
+      const backupFilename = `${timestamp}_${safeFilename}`;
+      const backupPath = join(this.snapshotsDir, backupFilename);
+
+      mkdirSync(dirname(backupPath), { recursive: true });
+      writeFileSync(backupPath, content);
+
+      const entry: BackupEntry = {
+        originalPath: oldPath,
+        backupPath: backupFilename,
+        timestamp,
+        size: content.length,
+        sessionId: this.currentSessionId,
+        eventType: "rename",
+        renamedTo: newPath,
+      };
+
+      this.index.entries.push(entry);
+      this.saveIndex();
+
+      return entry;
+    } catch (err) {
+      console.error(`Failed to backup renamed file ${oldPath}:`, err);
+      return null;
+    }
+  }
+
+  getLatestBackupContent(relativePath: string): { content: Buffer; timestamp: number } | null {
+    const backups = this.getBackupsForFile(relativePath);
+    if (backups.length === 0) {
+      return null;
+    }
+
+    const latestBackup = backups[0];
+    const backupFullPath = join(this.snapshotsDir, latestBackup.backupPath);
+
+    try {
+      if (existsSync(backupFullPath)) {
+        const content = readFileSync(backupFullPath);
+        return { content, timestamp: latestBackup.timestamp };
+      }
+    } catch {
+      // ignore read errors
+    }
+
+    return null;
+  }
+
   snapshotWorkspace(): { total: number; backed: number; skipped: number } {
     const files = getAllFiles(this.config.workspace);
     let backed = 0;
@@ -274,11 +330,11 @@ export class BackupManager {
         } else {
           failed++;
         }
-      } else if (entry.eventType === "rename" && entry.renamedFrom) {
-        const currentPath = join(this.config.workspace, entry.originalPath);
-        if (existsSync(currentPath)) {
+      } else if (entry.eventType === "rename" && entry.renamedTo) {
+        const renamedPath = join(this.config.workspace, entry.renamedTo);
+        if (existsSync(renamedPath)) {
           try {
-            unlinkSync(currentPath);
+            unlinkSync(renamedPath);
             deleted++;
           } catch {
             // ignore
@@ -333,11 +389,11 @@ export class BackupManager {
         } else {
           failed++;
         }
-      } else if (entry.eventType === "rename" && entry.renamedFrom) {
-        const currentPath = join(this.config.workspace, entry.originalPath);
-        if (existsSync(currentPath)) {
+      } else if (entry.eventType === "rename" && entry.renamedTo) {
+        const renamedPath = join(this.config.workspace, entry.renamedTo);
+        if (existsSync(renamedPath)) {
           try {
-            unlinkSync(currentPath);
+            unlinkSync(renamedPath);
             deleted++;
           } catch {
             // ignore
