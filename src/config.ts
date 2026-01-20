@@ -1,4 +1,5 @@
 import { join } from "path";
+import { readFileSync, existsSync } from "fs";
 
 export interface ShieldConfig {
   workspace: string;
@@ -12,18 +13,27 @@ export const SNAPSHOTS_DIR = "snapshots";
 export const INDEX_FILE = "index.json";
 
 export const DEFAULT_EXCLUDE_PATTERNS = [
-  ".git",
-  ".git/**",
+  "**/.*",
+  "**/.*/**",
   "node_modules",
   "node_modules/**",
-  ".shield",
-  ".shield/**",
+  "**/*.db",
+  "**/*.sqlite",
+  "**/*.sqlite3",
   "**/*.log",
   "**/*.tmp",
   "**/*.swp",
-  "**/*.swo",
+  "**/*.lock",
+  "**/*.lck",
+  "**/*.pid",
+  "**/*.idx",
+  "**/*.etl",
+  "**/*.evtx",
+  "**/*.evt",
+  "**/*.trace",
+  "**/*.out",
+  "**/*.asl",
   "**/~*",
-  "**/.DS_Store",
   "**/Thumbs.db",
   "**/__pycache__",
   "**/__pycache__/**",
@@ -32,21 +42,38 @@ export const DEFAULT_EXCLUDE_PATTERNS = [
   "**/dist/**",
   "**/build",
   "**/build/**",
-  "**/.next",
-  "**/.next/**",
-  "**/.nuxt",
-  "**/.nuxt/**",
   "**/coverage",
   "**/coverage/**",
-  "**/.cache",
-  "**/.cache/**",
+  "**/AppData/Local/Temp/**",
+  "**/AppData/Local/Microsoft/**",
+  "**/AppData/Roaming/Microsoft/**",
+  "**/Windows/Temp/**",
+  "**/Library/Caches/**"
 ];
 
 export function getDefaultConfig(workspace: string): ShieldConfig {
+  const excludePatterns = [...DEFAULT_EXCLUDE_PATTERNS];
+  
+  // Read .gitignore file if it exists and add its patterns
+  const gitignorePath = join(workspace, ".gitignore");
+  if (existsSync(gitignorePath)) {
+    try {
+      const gitignoreContent = readFileSync(gitignorePath, "utf-8");
+      const gitignorePatterns = gitignoreContent
+        .split("\n")
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith("#")); // Remove empty lines and comments
+      
+      excludePatterns.push(...gitignorePatterns);
+    } catch (error) {
+      console.warn("Failed to read .gitignore file:", error);
+    }
+  }
+  
   return {
     workspace: workspace,
     vaultDir: join(workspace, DEFAULT_VAULT_NAME),
-    excludePatterns: DEFAULT_EXCLUDE_PATTERNS,
+    excludePatterns: excludePatterns,
     maxBackupAgeDays: 7,
   };
 }

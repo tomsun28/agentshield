@@ -9,7 +9,7 @@ import {
 } from "fs";
 import { join, dirname } from "path";
 import { ShieldConfig, getSnapshotsDir, getIndexPath } from "./config.js";
-import { matchesPattern, getAllFiles, removeEmptyDirs } from "./utils.js";
+import { matchesPattern, removeEmptyDirs } from "./utils.js";
 
 export type FileEventType = "change" | "delete" | "rename" | "create";
 
@@ -117,7 +117,6 @@ export class BackupManager {
         continue;
       }
 
-      const fullPath = join(this.config.workspace, relativePath);
       const safeFilename = relativePath.replace(/[/\\]/g, "__");
       const backupFilename = `${timestamp}_${safeFilename}`;
       const backupPath = join(this.snapshotsDir, backupFilename);
