@@ -52,24 +52,21 @@ Commands:
   help                   Show this help message
 
 Restore Options:
+  shield restore <id>                 Restore by snapshot ID or timestamp (recommended)
   shield restore                      Interactive: show recent snapshots
-  shield restore --id=<snapshot_id>   Restore a specific snapshot by ID
-  shield restore --time=<timestamp>   Restore snapshot by timestamp
   shield restore --file=<path>        Restore a specific file to latest version
 
 Options:
   --path=<dir>           Specify workspace directory
   --days=<N>             For clean: max age in days
-  --id=<snapshot_id>     For restore: snapshot ID (e.g., snap_1737216000000)
-  --time=<timestamp>     For restore: snapshot timestamp
   --file=<path>          For restore: specific file path
 
 Examples:
   shield watch ./my-project
   shield start ./my-project
   shield list
-  shield restore --id=snap_1737216000000
-  shield restore --time=1737216000000
+  shield restore snap_1737216000000   # Restore by snapshot ID
+  shield restore 1737216000000        # Restore by timestamp
   shield restore --file=src/index.ts
   shield clean --days=3
   shield status
@@ -173,8 +170,7 @@ async function cmdRestore(options: CliOptions): Promise<void> {
   const backupManager = new BackupManager(config);
   const restoreLockPath = join(config.vaultDir, "restore.lock");
   
-  const idFlag = options.flags["id"] as string | undefined;
-  const timeFlag = options.flags["time"] as string | undefined;
+  const idArg = options.args[0] as string | undefined;
   const fileFlag = options.flags["file"] as string | undefined;
   
   const snapshots = backupManager.getAllSnapshots();
@@ -187,36 +183,38 @@ async function cmdRestore(options: CliOptions): Promise<void> {
   try {
     writeFileSync(restoreLockPath, `${Date.now()}`);
 
-    // Restore by snapshot ID
-    if (idFlag) {
-      console.log(`🔄 Restoring snapshot: ${idFlag}...`);
-      const result = backupManager.restoreSnapshot(idFlag);
-      if (result.restored > 0 || result.deleted > 0) {
-        console.log(`✓ Restored ${result.restored} files, removed ${result.deleted} new files`);
-      } else if (result.failed > 0) {
-        console.log(`✗ Failed to restore: ${result.failed} files`);
-        process.exit(1);
+    // Restore by positional argument (snapshot ID or timestamp)
+    if (idArg) {
+      // Check if it's a snapshot ID (starts with "snap_") or a timestamp (pure number)
+      if (idArg.startsWith("snap_")) {
+        // Restore by snapshot ID
+        console.log(`🔄 Restoring snapshot: ${idArg}...`);
+        const result = backupManager.restoreSnapshot(idArg);
+        if (result.restored > 0 || result.deleted > 0) {
+          console.log(`✓ Restored ${result.restored} files, removed ${result.deleted} new files`);
+        } else if (result.failed > 0) {
+          console.log(`✗ Failed to restore: ${result.failed} files`);
+          process.exit(1);
+        } else {
+          console.log(`✗ Snapshot not found: ${idArg}`);
+          process.exit(1);
+        }
       } else {
-        console.log(`✗ Snapshot not found: ${idFlag}`);
-        process.exit(1);
-      }
-      return;
-    }
-
-    // Restore by timestamp
-    if (timeFlag) {
-      const timestamp = parseInt(timeFlag, 10);
-      if (isNaN(timestamp)) {
-        console.error(`Error: Invalid timestamp: ${timeFlag}`);
-        process.exit(1);
-      }
-      console.log(`🔄 Restoring snapshot at ${new Date(timestamp).toISOString()}...`);
-      const result = backupManager.restoreToSnapshot(timestamp);
-      if (result.restored > 0 || result.deleted > 0) {
-        console.log(`✓ Restored ${result.restored} files, removed ${result.deleted} new files`);
-      } else {
-        console.log(`✗ No snapshot found at timestamp: ${timestamp}`);
-        process.exit(1);
+        // Try to parse as timestamp
+        const timestamp = parseInt(idArg, 10);
+        if (isNaN(timestamp)) {
+          console.error(`Error: Invalid snapshot ID or timestamp: ${idArg}`);
+          console.error(`  Expected: snap_XXXXX (snapshot ID) or XXXXX (timestamp)`);
+          process.exit(1);
+        }
+        console.log(`🔄 Restoring snapshot at ${new Date(timestamp).toISOString()}...`);
+        const result = backupManager.restoreToSnapshot(timestamp);
+        if (result.restored > 0 || result.deleted > 0) {
+          console.log(`✓ Restored ${result.restored} files, removed ${result.deleted} new files`);
+        } else {
+          console.log(`✗ No snapshot found at timestamp: ${timestamp}`);
+          process.exit(1);
+        }
       }
       return;
     }
@@ -260,7 +258,7 @@ async function cmdRestore(options: CliOptions): Promise<void> {
     }
     
     console.log("\n📌 Legend: 📄 changed | 🗑️ deleted | 📝 renamed | ✨ created");
-    console.log("\n💡 Usage: shield restore --id=snap_XXXXX");
+    console.log("\n💡 Usage: shield restore <snapshot_id or timestamp>");
 
   } finally {
     // Wait for watcher's debounce(1s) + batch(2s) time window before deleting lock
@@ -314,7 +312,7 @@ async function cmdList(options: CliOptions): Promise<void> {
   }
   
   console.log("📌 Legend: 📄 changed | 🗑️ deleted | 📝 renamed | ✨ created");
-  console.log("\n💡 To restore: shield restore --id=<snapshot_id>");
+  console.log("\n💡 To restore: shield restore <snapshot_id or timestamp>");
 }
 
 async function cmdClean(options: CliOptions): Promise<void> {
