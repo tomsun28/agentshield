@@ -11,7 +11,7 @@ interface TrackedFile {
   timestamp: number;
 }
 
-// 待处理的文件变更
+// pending change
 interface PendingChange {
   relativePath: string;
   eventType: FileEventType;
@@ -25,13 +25,13 @@ export class ShieldWatcher {
   private watcher: FSWatcher | null = null;
   private debounceMap: Map<string, NodeJS.Timeout> = new Map();
   private debounceMs: number = 1000;
-  private batchMs: number = 2000; // 批量收集变更的时间窗口
+  private batchMs: number = 2000; // batch collect change time window
   private log: LogFn;
   private trackedFiles: Map<string, TrackedFile> = new Map();
   private pendingRenames: Map<string, { content: Buffer; timestamp: number }> = new Map();
   private restoreLockPath: string;
   
-  // 快照批量处理
+  // snapshot batch process
   private pendingChanges: Map<string, PendingChange> = new Map();
   private batchTimeout: NodeJS.Timeout | null = null;
 
@@ -162,10 +162,16 @@ export class ShieldWatcher {
     }
 
     setTimeout(() => {
+      // not record change during restore
+      if (existsSync(this.restoreLockPath)) {
+        this.pendingRenames.delete(relativePath);
+        this.trackedFiles.delete(relativePath);
+        return;
+      }
       const pending = this.pendingRenames.get(relativePath);
       if (pending) {
         this.pendingRenames.delete(relativePath);
-        // 使用快照方式记录删除
+        // use snapshot to record delete
         this.addPendingChange({
           relativePath,
           eventType: "delete",
@@ -182,7 +188,7 @@ export class ShieldWatcher {
         this.pendingRenames.delete(oldPath);
         this.trackedFiles.delete(oldPath);
         
-        // 使用快照方式记录重命名
+        // use the snapshot to record rename
         this.addPendingChange({
           relativePath: oldPath,
           eventType: "rename",
@@ -218,6 +224,10 @@ export class ShieldWatcher {
    * 添加待处理的变更到队列，批量创建快照
    */
   private addPendingChange(change: PendingChange): void {
+    // 恢复过程中不记录变更
+    if (existsSync(this.restoreLockPath)) {
+      return;
+    }
     // 使用 Map 去重，同一文件只保留最新的变更
     this.pendingChanges.set(change.relativePath, change);
     
@@ -232,10 +242,17 @@ export class ShieldWatcher {
   }
 
   /**
-   * 刷新待处理的变更，创建快照
+   * flush pending changes to create snapshot
    */
   private flushPendingChanges(): void {
     if (this.pendingChanges.size === 0) {
+      return;
+    }
+    
+    // not create snapshot during restore
+    if (existsSync(this.restoreLockPath)) {
+      this.pendingChanges.clear();
+      this.batchTimeout = null;
       return;
     }
     
@@ -243,7 +260,7 @@ export class ShieldWatcher {
     this.pendingChanges.clear();
     this.batchTimeout = null;
     
-    // 创建快照
+    // create snapshot
     const snapshot = this.backupManager.createSnapshot(changes);
     
     if (snapshot) {
@@ -261,7 +278,7 @@ export class ShieldWatcher {
 
   stop(): void {
     if (this.watcher) {
-      // 先刷新待处理的变更
+      // flush pending changes
       this.flushPendingChanges();
       
       this.watcher.close();

@@ -263,6 +263,9 @@ async function cmdRestore(options: CliOptions): Promise<void> {
     console.log("\n💡 Usage: shield restore --id=snap_XXXXX");
 
   } finally {
+    // 等待 watcher 的 debounce(1s) + batch(2s) 时间窗口后再删除锁
+    // 确保恢复期间的文件变更不会被记录
+    await new Promise(resolve => setTimeout(resolve, 3500));
     try {
       if (existsSync(restoreLockPath)) {
         unlinkSync(restoreLockPath);
