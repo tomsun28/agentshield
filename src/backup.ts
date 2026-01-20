@@ -71,6 +71,12 @@ export class BackupManager {
         if (!parsed.version) {
           parsed.version = 2;
         }
+        // ensure each snapshot has a files array
+        for (const snapshot of parsed.snapshots) {
+          if (!snapshot.files) {
+            snapshot.files = [];
+          }
+        }
         return parsed;
       } catch {
         return { version: 2, snapshots: [] };
@@ -172,7 +178,8 @@ export class BackupManager {
    * 获取所有快照，按时间倒序
    */
   getAllSnapshots(): Snapshot[] {
-    return [...this.index.snapshots].sort((a, b) => b.timestamp - a.timestamp);
+    const snapshots = this.index.snapshots || [];
+    return [...snapshots].sort((a, b) => b.timestamp - a.timestamp);
   }
 
   /**
@@ -195,8 +202,9 @@ export class BackupManager {
   getFileHistory(relativePath: string): Array<{ snapshot: Snapshot; file: SnapshotFile }> {
     const history: Array<{ snapshot: Snapshot; file: SnapshotFile }> = [];
     
-    for (const snapshot of this.index.snapshots) {
-      const file = snapshot.files.find(f => f.path === relativePath);
+    for (const snapshot of this.index.snapshots || []) {
+      const files = snapshot.files || [];
+      const file = files.find(f => f.path === relativePath);
       if (file) {
         history.push({ snapshot, file });
       }
@@ -243,7 +251,7 @@ export class BackupManager {
     let failed = 0;
     let deleted = 0;
 
-    for (const file of snapshot.files) {
+    for (const file of snapshot.files || []) {
       const backupFullPath = join(this.snapshotsDir, file.backupPath);
       const targetPath = join(this.config.workspace, file.path);
 
@@ -347,10 +355,10 @@ export class BackupManager {
 
     const toKeep: Snapshot[] = [];
 
-    for (const snapshot of this.index.snapshots) {
+    for (const snapshot of this.index.snapshots || []) {
       if (snapshot.timestamp < cutoff) {
         // 删除快照中的备份文件
-        for (const file of snapshot.files) {
+        for (const file of snapshot.files || []) {
           const backupPath = join(this.snapshotsDir, file.backupPath);
           try {
             if (existsSync(backupPath)) {
@@ -389,11 +397,11 @@ export class BackupManager {
     let totalFiles = 0;
     let totalSize = 0;
 
-    for (const snapshot of this.index.snapshots) {
-      for (const file of snapshot.files) {
+    for (const snapshot of this.index.snapshots || []) {
+      for (const file of snapshot.files || []) {
         uniqueFiles.add(file.path);
         totalFiles++;
-        totalSize += file.size;
+        totalSize += file.size || 0;
       }
     }
     
