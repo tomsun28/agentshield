@@ -64,7 +64,7 @@ shield status
 shield list
 
 # 恢复文件到特定快照点
-shield restore --id=<snapshot_id>
+shield restore <id>
 ```
 
 ### 状态和清理
