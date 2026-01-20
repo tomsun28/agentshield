@@ -57,52 +57,15 @@ shield stop ./my-project
 shield status
 ```
 
-### Exec 模式（推荐用于代理任务）
-
-```bash
-# 快照工作区，运行命令，然后允许轻松恢复
-shield exec -- npm run agent-task
-shield exec -- python ai_script.py
-shield exec --path=./my-project -- cargo run
-```
-
-此模式会：
-1. 在命令运行前创建完整快照
-2. 执行你的代理命令
-3. 允许你轻松恢复任何修改过的文件
-
 ### 恢复文件
 
 ```bash
-# 列出所有备份及时间戳（用于 --time 选项）
+# 列出所有变更及快照点
 shield list
 
-# 恢复所有文件到最近的备份
-shield restore
-
-# 仅恢复特定文件到其最新备份
-shield restore --file=src/index.ts
-
-# 恢复所有文件到特定时间戳
-shield restore --time=1737216000000
-
-# 恢复特定文件到特定时间戳
-shield restore --file=src/index.ts --time=1737216000000
+# 恢复文件到特定快照点
+shield restore --id=<snapshot_id>
 ```
-
-### 列出备份
-
-```bash
-# 列出所有备份详情，包括时间戳
-shield list
-```
-
-`list` 命令显示：
-- 文件路径及事件类型图标（📄 修改、🗑️ 删除、📝 重命名）
-- 相对时间和文件大小
-- 精确时间戳（用于 `--time` 选项）
-- ISO 日期字符串
-- 重命名历史（如适用）
 
 ### 状态和清理
 
