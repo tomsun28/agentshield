@@ -13,24 +13,24 @@ import { matchesPattern, removeEmptyDirs } from "./utils.js";
 
 export type FileEventType = "change" | "delete" | "rename" | "create";
 
-// 快照中的文件记录
+// File record in snapshot
 export interface SnapshotFile {
-  path: string;           // 文件相对路径
-  backupPath: string;     // 备份文件名
+  path: string;           // File relative path
+  backupPath: string;     // Backup filename
   size: number;
   eventType: FileEventType;
-  renamedTo?: string;     // 重命名时的新路径
+  renamedTo?: string;     // New path when renamed
 }
 
-// 快照 - 时间线上的一个版本点
+// Snapshot - A version point on the timeline
 export interface Snapshot {
   id: string;             // snap_<timestamp>
-  timestamp: number;      // 时间戳
-  files: SnapshotFile[];  // 变更的文件列表
-  message?: string;       // 可选描述
+  timestamp: number;      // Timestamp
+  files: SnapshotFile[];  // List of changed files
+  message?: string;       // Optional description
 }
 
-// 简化的索引结构
+// Simplified index structure
 export interface BackupIndex {
   version: number;
   snapshots: Snapshot[];
@@ -94,7 +94,7 @@ export class BackupManager {
   }
 
   /**
-   * 创建快照 - 将多个文件变更打包成一个快照
+   * Create snapshot - Package multiple file changes into one snapshot
    */
   createSnapshot(files: Array<{
     relativePath: string;
@@ -127,19 +127,19 @@ export class BackupManager {
         let fileSize = 0;
 
         if (eventType === "delete" || eventType === "rename") {
-          // 删除或重命名：保存变更前的内容
+          // Delete or rename: Save content before change
           if (content) {
             writeFileSync(backupPath, content);
             fileSize = content.length;
           }
         } else if (eventType === "change") {
-          // 修改：保存变更前的内容
+          // Modify: Save content before change
           if (content) {
             writeFileSync(backupPath, content);
             fileSize = content.length;
           }
         } else if (eventType === "create") {
-          // 新建文件：不需要保存内容，只记录路径
+          // New file: No need to save content, just record path
           fileSize = 0;
         }
 
@@ -174,7 +174,7 @@ export class BackupManager {
   }
 
   /**
-   * 获取所有快照，按时间倒序
+   * Get all snapshots, sorted by time in descending order
    */
   getAllSnapshots(): Snapshot[] {
     const snapshots = this.index.snapshots || [];
@@ -182,21 +182,21 @@ export class BackupManager {
   }
 
   /**
-   * 根据 ID 获取快照
+   * Get snapshot by ID
    */
   getSnapshotById(snapshotId: string): Snapshot | null {
     return this.index.snapshots.find(s => s.id === snapshotId) || null;
   }
 
   /**
-   * 根据时间戳获取快照
+   * Get snapshot by timestamp
    */
   getSnapshotByTimestamp(timestamp: number): Snapshot | null {
     return this.index.snapshots.find(s => s.timestamp === timestamp) || null;
   }
 
   /**
-   * 获取某个文件的所有备份版本
+   * Get all backup versions of a file
    */
   getFileHistory(relativePath: string): Array<{ snapshot: Snapshot; file: SnapshotFile }> {
     const history: Array<{ snapshot: Snapshot; file: SnapshotFile }> = [];
@@ -213,7 +213,7 @@ export class BackupManager {
   }
 
   /**
-   * 获取文件最新的备份内容
+   * Get latest backup content of a file
    */
   getLatestBackupContent(relativePath: string): { content: Buffer; timestamp: number } | null {
     const history = this.getFileHistory(relativePath);
@@ -237,7 +237,7 @@ export class BackupManager {
   }
 
   /**
-   * 恢复快照 - 批量恢复快照中的所有文件
+   * Restore snapshot - Batch restore all files in snapshot
    */
   restoreSnapshot(snapshotId: string): { restored: number; failed: number; deleted: number } {
     const snapshot = this.getSnapshotById(snapshotId);
@@ -256,7 +256,7 @@ export class BackupManager {
 
       try {
         if (file.eventType === "delete") {
-          // 文件被删除了，恢复它
+          // File was deleted, restore it
           if (existsSync(backupFullPath)) {
             mkdirSync(dirname(targetPath), { recursive: true });
             copyFileSync(backupFullPath, targetPath);
@@ -265,7 +265,7 @@ export class BackupManager {
             failed++;
           }
         } else if (file.eventType === "rename" && file.renamedTo) {
-          // 文件被重命名了，恢复原名并删除新名
+          // File was renamed, restore original name and delete new name
           const renamedPath = join(this.config.workspace, file.renamedTo);
           if (existsSync(renamedPath)) {
             unlinkSync(renamedPath);
@@ -279,13 +279,13 @@ export class BackupManager {
             failed++;
           }
         } else if (file.eventType === "create") {
-          // 文件是新创建的，删除它
+          // File is newly created, delete it
           if (existsSync(targetPath)) {
             unlinkSync(targetPath);
             deleted++;
           }
         } else if (file.eventType === "change") {
-          // 文件被修改了，恢复原版本
+          // File was modified, restore original version
           if (existsSync(backupFullPath)) {
             mkdirSync(dirname(targetPath), { recursive: true });
             copyFileSync(backupFullPath, targetPath);
@@ -304,7 +304,7 @@ export class BackupManager {
   }
 
   /**
-   * 恢复到指定时间戳的快照
+   * Restore to snapshot at specified timestamp
    */
   restoreToSnapshot(timestamp: number): { restored: number; failed: number; deleted: number } {
     const snapshot = this.getSnapshotByTimestamp(timestamp);
@@ -316,7 +316,7 @@ export class BackupManager {
   }
 
   /**
-   * 恢复单个文件到最新备份
+   * Restore single file to latest backup
    */
   restoreFile(relativePath: string): boolean {
     const history = this.getFileHistory(relativePath);
@@ -345,7 +345,7 @@ export class BackupManager {
   }
 
   /**
-   * 清理旧快照
+   * Clean old snapshots
    */
   cleanOldSnapshots(maxAgeDays: number): { removed: number; freedBytes: number } {
     const cutoff = Date.now() - (maxAgeDays * 24 * 60 * 60 * 1000);
@@ -356,7 +356,7 @@ export class BackupManager {
 
     for (const snapshot of this.index.snapshots || []) {
       if (snapshot.timestamp < cutoff) {
-        // 删除快照中的备份文件
+        // Delete backup files in snapshot
         for (const file of snapshot.files || []) {
           const backupPath = join(this.snapshotsDir, file.backupPath);
           try {
@@ -384,7 +384,7 @@ export class BackupManager {
   }
 
   /**
-   * 获取统计信息
+   * Get statistics
    */
   getStats(): { 
     snapshots: number;

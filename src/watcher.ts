@@ -205,14 +205,14 @@ export class ShieldWatcher {
   }
 
   private handleFileChange(relativePath: string, eventType: FileEventType): void {
-    // 获取变更前的内容用于备份
+    // Get content before change for backup
     const tracked = this.trackedFiles.get(relativePath);
     const content = tracked?.content;
     
-    // 更新跟踪状态
+    // Update tracking status
     this.trackFile(relativePath);
     
-    // 添加到待处理队列
+    // Add to pending queue
     this.addPendingChange({
       relativePath,
       eventType,
@@ -221,17 +221,17 @@ export class ShieldWatcher {
   }
 
   /**
-   * 添加待处理的变更到队列，批量创建快照
+   * Add pending changes to queue for batch snapshot creation
    */
   private addPendingChange(change: PendingChange): void {
-    // 恢复过程中不记录变更
+    // Don't record changes during restore
     if (existsSync(this.restoreLockPath)) {
       return;
     }
-    // 使用 Map 去重，同一文件只保留最新的变更
+    // Use Map to deduplicate, keep only the latest change for each file
     this.pendingChanges.set(change.relativePath, change);
     
-    // 重置批量处理定时器
+    // Reset batch processing timer
     if (this.batchTimeout) {
       clearTimeout(this.batchTimeout);
     }

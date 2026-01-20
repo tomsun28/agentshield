@@ -187,7 +187,7 @@ async function cmdRestore(options: CliOptions): Promise<void> {
   try {
     writeFileSync(restoreLockPath, `${Date.now()}`);
 
-    // 按快照 ID 恢复
+    // Restore by snapshot ID
     if (idFlag) {
       console.log(`🔄 Restoring snapshot: ${idFlag}...`);
       const result = backupManager.restoreSnapshot(idFlag);
@@ -203,7 +203,7 @@ async function cmdRestore(options: CliOptions): Promise<void> {
       return;
     }
 
-    // 按时间戳恢复
+    // Restore by timestamp
     if (timeFlag) {
       const timestamp = parseInt(timeFlag, 10);
       if (isNaN(timestamp)) {
@@ -221,7 +221,7 @@ async function cmdRestore(options: CliOptions): Promise<void> {
       return;
     }
 
-    // 恢复单个文件
+    // Restore single file
     if (fileFlag) {
       console.log(`🔄 Restoring file: ${fileFlag}...`);
       const success = backupManager.restoreFile(fileFlag);
@@ -234,7 +234,7 @@ async function cmdRestore(options: CliOptions): Promise<void> {
       return;
     }
 
-    // 显示最近的快照供选择
+    // Show recent snapshots for selection
     console.log("📋 Recent Snapshots (use --id=<snapshot_id> to restore)\n");
     for (const snapshot of snapshots.slice(0, 10)) {
       const timeStr = formatTimeAgo(snapshot.timestamp);
@@ -263,8 +263,8 @@ async function cmdRestore(options: CliOptions): Promise<void> {
     console.log("\n💡 Usage: shield restore --id=snap_XXXXX");
 
   } finally {
-    // 等待 watcher 的 debounce(1s) + batch(2s) 时间窗口后再删除锁
-    // 确保恢复期间的文件变更不会被记录
+    // Wait for watcher's debounce(1s) + batch(2s) time window before deleting lock
+    // Ensure file changes during restore are not recorded
     await new Promise(resolve => setTimeout(resolve, 3500));
     try {
       if (existsSync(restoreLockPath)) {
