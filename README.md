@@ -64,8 +64,8 @@ shield status
 # List all backups with snapshot ID
 shield list
 
-# Restore a specific snapshot by ID
-shield restore --id=<snapshot_id>
+# Restore a specific snapshot by ID or timestamp
+shield restore <id> 
 ```
 
 ### Status and Cleanup
