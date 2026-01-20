@@ -22,7 +22,7 @@ A workspace history version management tool that protects your workspace from un
 npm install -g agentshield
 ```
 
-### Download Binary
+### Via Binary 
 
 ```bash
 curl -fsSL https://github.com/tomsun28/agentshield/raw/main/install.sh | bash
@@ -72,15 +72,6 @@ This mode:
 2. Executes your agent command
 3. Allows you to easily restore any modified files
 
-### One-time Snapshot
-
-```bash
-# Take a snapshot of current directory
-shield snapshot
-
-# Take a snapshot of specific directory  
-shield snapshot ./my-project
-```
 
 ### Restore Files
 

@@ -45,32 +45,32 @@ Commands:
   watch [path]           Start watching a directory (default: current dir)
   start [path]           Start watching in background (daemon mode)
   stop [path]            Stop background watching
-  exec <command>         Snapshot workspace, run command, then allow restore
-  snapshot [path]        Take a one-time snapshot of all files
-  restore                Restore all files to most recent backup
-  list                   List all backups with timestamps
-  clean [--days=N]       Remove backups older than N days (default: 7)
-  status                 Show backup statistics
+  list                   List all snapshots (time-based versions)
+  restore                Restore files from a snapshot
+  clean [--days=N]       Remove snapshots older than N days (default: 7)
+  status                 Show statistics
   help                   Show this help message
 
 Restore Options:
-  shield restore                    Restore all files to most recent backup
-  shield restore --file=<path>      Restore only a specific file
-  shield restore --time=<timestamp> Restore all files to a specific time
+  shield restore                      Interactive: show recent snapshots
+  shield restore --id=<snapshot_id>   Restore a specific snapshot by ID
+  shield restore --time=<timestamp>   Restore snapshot by timestamp
+  shield restore --file=<path>        Restore a specific file to latest version
 
 Options:
   --path=<dir>           Specify workspace directory
-  --days=<N>             For clean command: max age in days
-  --file=<path>          For restore: restore specific file only
-  --time=<timestamp>     For restore: restore to specific timestamp
+  --days=<N>             For clean: max age in days
+  --id=<snapshot_id>     For restore: snapshot ID (e.g., snap_1737216000000)
+  --time=<timestamp>     For restore: snapshot timestamp
+  --file=<path>          For restore: specific file path
 
 Examples:
   shield watch ./my-project
-  shield exec -- npm run agent-task
-  shield restore
-  shield restore --file=src/index.ts
-  shield restore --time=1737216000000
+  shield start ./my-project
   shield list
+  shield restore --id=snap_1737216000000
+  shield restore --time=1737216000000
+  shield restore --file=src/index.ts
   shield clean --days=3
   shield status
 `);
@@ -88,12 +88,6 @@ export async function runCli(argv: string[]): Promise<void> {
       break;
     case "stop":
       await cmdStop(options);
-      break;
-    case "exec":
-      await cmdExec(options, argv);
-      break;
-    case "snapshot":
-      await cmdSnapshot(options);
       break;
     case "restore":
       await cmdRestore(options);
@@ -151,75 +145,19 @@ async function cmdWatch(options: CliOptions): Promise<void> {
     log("");
     watcher.stop();
     const stats = backupManager.getStats();
-    log(`📊 Session summary: ${stats.totalBackups} backups, ${stats.uniqueFiles} unique files`);
+    log(`📊 Session summary: ${stats.snapshots} snapshots, ${stats.uniqueFiles} unique files`);
     process.exit(0);
   });
   
   process.on("SIGTERM", () => {
     watcher.stop();
     const stats = backupManager.getStats();
-    log(`📊 Session summary: ${stats.totalBackups} backups, ${stats.uniqueFiles} unique files`);
+    log(`📊 Session summary: ${stats.snapshots} snapshots, ${stats.uniqueFiles} unique files`);
     log(`Shield daemon stopped`);
     process.exit(0);
   });
   
   await new Promise(() => {});
-}
-
-async function cmdExec(options: CliOptions, rawArgv: string[]): Promise<void> {
-  const dashDashIndex = rawArgv.indexOf("--");
-  if (dashDashIndex === -1 || dashDashIndex === rawArgv.length - 1) {
-    console.error("Usage: shield exec -- <command>");
-    console.error("Example: shield exec -- npm run agent-task");
-    process.exit(1);
-  }
-  
-  const commandArgs = rawArgv.slice(dashDashIndex + 1);
-  const pathArg = (options.flags["path"] as string) || ".";
-  const workspace = resolve(pathArg);
-  const config = getDefaultConfig(workspace);
-  const backupManager = new BackupManager(config);
-  
-  console.log("🛡️  Shield Exec Mode");
-  console.log("─".repeat(50));
-  
-  console.log("📸 Taking pre-execution snapshot...");
-  const snapshot = backupManager.snapshotWorkspace();
-  console.log(`✓ Snapshot complete: ${snapshot.backed} files backed up, ${snapshot.skipped} skipped`);
-  console.log("─".repeat(50));
-  
-  console.log(`🚀 Running: ${commandArgs.join(" ")}`);
-  console.log("─".repeat(50));
-  
-  const child = spawn(commandArgs[0], commandArgs.slice(1), {
-    stdio: "inherit",
-    shell: true,
-    cwd: workspace,
-  });
-  
-  await new Promise<void>((resolve, reject) => {
-    child.on("close", (code) => {
-      console.log("─".repeat(50));
-      if (code === 0) {
-        console.log("✓ Command completed successfully");
-      } else {
-        console.log(`⚠ Command exited with code ${code}`);
-      }
-      console.log("\n💡 To restore files, run: shield restore <file>");
-      console.log("   To list all backups: shield list");
-      resolve();
-    });
-    child.on("error", reject);
-  });
-}
-
-async function cmdSnapshot(options: CliOptions): Promise<void> {
-  const config = await getConfig(options);
-  const backupManager = new BackupManager(config);
-  
-  console.log("📸 Taking snapshot...");
-  const result = backupManager.snapshotWorkspace();
-  console.log(`✓ Complete: ${result.backed} files backed up, ${result.skipped} skipped`);
 }
 
 async function cmdRestore(options: CliOptions): Promise<void> {
@@ -235,38 +173,58 @@ async function cmdRestore(options: CliOptions): Promise<void> {
   const backupManager = new BackupManager(config);
   const restoreLockPath = join(config.vaultDir, "restore.lock");
   
-  const fileFlag = options.flags["file"] as string | undefined;
+  const idFlag = options.flags["id"] as string | undefined;
   const timeFlag = options.flags["time"] as string | undefined;
+  const fileFlag = options.flags["file"] as string | undefined;
   
-  const backups = backupManager.getAllBackups();
-  if (backups.length === 0) {
-    console.log("No backups available");
+  const snapshots = backupManager.getAllSnapshots();
+  
+  if (snapshots.length === 0) {
+    console.log("No snapshots available");
     return;
   }
 
   try {
     writeFileSync(restoreLockPath, `${Date.now()}`);
 
-    if (fileFlag && timeFlag) {
-      const timestamp = parseInt(timeFlag, 10);
-      if (isNaN(timestamp)) {
-        console.error(`Error: Invalid timestamp: ${timeFlag}`);
+    // 按快照 ID 恢复
+    if (idFlag) {
+      console.log(`🔄 Restoring snapshot: ${idFlag}...`);
+      const result = backupManager.restoreSnapshot(idFlag);
+      if (result.restored > 0 || result.deleted > 0) {
+        console.log(`✓ Restored ${result.restored} files, removed ${result.deleted} new files`);
+      } else if (result.failed > 0) {
+        console.log(`✗ Failed to restore: ${result.failed} files`);
         process.exit(1);
-      }
-      console.log(`🔄 Restoring file '${fileFlag}' to timestamp ${timestamp}...`);
-      const success = backupManager.restoreFileToTime(fileFlag, timestamp);
-      if (success) {
-        console.log(`✓ Restored: ${fileFlag} to version at ${new Date(timestamp).toISOString()}`);
       } else {
-        console.log(`✗ Failed to restore: ${fileFlag}`);
+        console.log(`✗ Snapshot not found: ${idFlag}`);
         process.exit(1);
       }
       return;
     }
 
+    // 按时间戳恢复
+    if (timeFlag) {
+      const timestamp = parseInt(timeFlag, 10);
+      if (isNaN(timestamp)) {
+        console.error(`Error: Invalid timestamp: ${timeFlag}`);
+        process.exit(1);
+      }
+      console.log(`🔄 Restoring snapshot at ${new Date(timestamp).toISOString()}...`);
+      const result = backupManager.restoreToSnapshot(timestamp);
+      if (result.restored > 0 || result.deleted > 0) {
+        console.log(`✓ Restored ${result.restored} files, removed ${result.deleted} new files`);
+      } else {
+        console.log(`✗ No snapshot found at timestamp: ${timestamp}`);
+        process.exit(1);
+      }
+      return;
+    }
+
+    // 恢复单个文件
     if (fileFlag) {
-      console.log(`🔄 Restoring file: ${fileFlag}`);
-      const success = backupManager.restoreLatest(fileFlag);
+      console.log(`🔄 Restoring file: ${fileFlag}...`);
+      const success = backupManager.restoreFile(fileFlag);
       if (success) {
         console.log(`✓ Restored: ${fileFlag}`);
       } else {
@@ -276,21 +234,34 @@ async function cmdRestore(options: CliOptions): Promise<void> {
       return;
     }
 
-    if (timeFlag) {
-      const timestamp = parseInt(timeFlag, 10);
-      if (isNaN(timestamp)) {
-        console.error(`Error: Invalid timestamp: ${timeFlag}`);
-        process.exit(1);
+    // 显示最近的快照供选择
+    console.log("📋 Recent Snapshots (use --id=<snapshot_id> to restore)\n");
+    for (const snapshot of snapshots.slice(0, 10)) {
+      const timeStr = formatTimeAgo(snapshot.timestamp);
+      const dateStr = new Date(snapshot.timestamp).toISOString();
+      const fileCount = snapshot.files.length;
+      
+      console.log(`  📦 ${snapshot.id}`);
+      console.log(`    └─ ${timeStr} | ${fileCount} file(s) | ${dateStr}`);
+      for (const file of snapshot.files.slice(0, 5)) {
+        const icon = file.eventType === "delete" ? "🗑️" : 
+                     file.eventType === "rename" ? "📝" : 
+                     file.eventType === "create" ? "✨" : "📄";
+        console.log(`       ${icon} ${file.path}`);
       }
-      console.log(`🔄 Restoring all files to timestamp ${timestamp} (${new Date(timestamp).toISOString()})...`);
-      const result = backupManager.restoreToTime(timestamp);
-      console.log(`✓ Restored ${result.restored} files, ${result.failed} failed, ${result.deleted} cleaned`);
-      return;
+      if (snapshot.files.length > 5) {
+        console.log(`       ... and ${snapshot.files.length - 5} more files`);
+      }
+      console.log("");
     }
+    
+    if (snapshots.length > 10) {
+      console.log(`  ... and ${snapshots.length - 10} more snapshots (use 'shield list' to see all)`);
+    }
+    
+    console.log("\n📌 Legend: 📄 changed | 🗑️ deleted | 📝 renamed | ✨ created");
+    console.log("\n💡 Usage: shield restore --id=snap_XXXXX");
 
-    console.log("🔄 Restoring all files to most recent backup...");
-    const result = backupManager.restoreAllLatest();
-    console.log(`✓ Restored ${result.restored} files, ${result.failed} failed, ${result.deleted} cleaned`);
   } finally {
     try {
       if (existsSync(restoreLockPath)) {
@@ -306,33 +277,41 @@ async function cmdList(options: CliOptions): Promise<void> {
   const config = await getConfig(options);
   const backupManager = new BackupManager(config);
   
-  const backups = backupManager.getAllBackups();
+  const snapshots = backupManager.getAllSnapshots();
   
-  if (backups.length === 0) {
-    console.log("No backups found");
+  if (snapshots.length === 0) {
+    console.log("No snapshots found");
+    console.log("\n💡 Snapshots are created automatically when Shield detects file changes.");
     return;
   }
   
-  console.log(`📋 All Backups (${backups.length} total)\n`);
-  console.log("  Use 'shield restore --time=<timestamp>' to restore to a specific time\n");
+  console.log(`�� All Snapshots (${snapshots.length} total)\n`);
   
-  for (const backup of backups.slice(0, 50)) {
-    const timeStr = formatTimeAgo(backup.timestamp);
-    const sizeStr = formatBytes(backup.size);
-    const dateStr = new Date(backup.timestamp).toISOString();
-    const eventType = backup.eventType || "change";
-    const eventIcon = eventType === "delete" ? "🗑️" : eventType === "rename" ? "📝" : "📄";
+  for (const snapshot of snapshots.slice(0, 30)) {
+    const timeStr = formatTimeAgo(snapshot.timestamp);
+    const dateStr = new Date(snapshot.timestamp).toISOString();
+    const fileCount = snapshot.files.length;
+    const totalSize = snapshot.files.reduce((sum, f) => sum + f.size, 0);
     
-    console.log(`  ${eventIcon} ${backup.originalPath}`);
-    console.log(`    └─ ${timeStr} | ${sizeStr} | timestamp: ${backup.timestamp}`);
-    console.log(`       ${dateStr}${backup.renamedTo ? ` (renamed to: ${backup.renamedTo})` : ""}`);
+    console.log(`  📦 ${snapshot.id}`);
+    console.log(`    └─ ${timeStr} | ${fileCount} file(s) | ${formatBytes(totalSize)} | ${dateStr}`);
+    
+    for (const file of snapshot.files) {
+      const icon = file.eventType === "delete" ? "🗑️" : 
+                   file.eventType === "rename" ? "📝" : 
+                   file.eventType === "create" ? "✨" : "📄";
+      const suffix = file.renamedTo ? ` → ${file.renamedTo}` : "";
+      console.log(`       ${icon} ${file.path}${suffix}`);
+    }
+    console.log("");
   }
   
-  if (backups.length > 50) {
-    console.log(`\n  ... and ${backups.length - 50} more`);
+  if (snapshots.length > 30) {
+    console.log(`  ... and ${snapshots.length - 30} more snapshots`);
   }
   
-  console.log("\n📌 Legend: 📄 changed | 🗑️ deleted | 📝 renamed");
+  console.log("📌 Legend: 📄 changed | 🗑️ deleted | 📝 renamed | ✨ created");
+  console.log("\n💡 To restore: shield restore --id=<snapshot_id>");
 }
 
 async function cmdClean(options: CliOptions): Promise<void> {
@@ -341,9 +320,9 @@ async function cmdClean(options: CliOptions): Promise<void> {
   
   const days = parseInt(options.flags["days"] as string) || 7;
   
-  console.log(`🧹 Cleaning backups older than ${days} days...`);
-  const result = backupManager.cleanOldBackups(days);
-  console.log(`✓ Removed ${result.removed} backups, freed ${formatBytes(result.freedBytes)}`);
+  console.log(`🧹 Cleaning snapshots older than ${days} days...`);
+  const result = backupManager.cleanOldSnapshots(days);
+  console.log(`✓ Removed ${result.removed} snapshots, freed ${formatBytes(result.freedBytes)}`);
 }
 
 async function cmdStatus(options: CliOptions): Promise<void> {
@@ -355,10 +334,10 @@ async function cmdStatus(options: CliOptions): Promise<void> {
   console.log("📊 Shield Status\n");
   console.log(`  Workspace:      ${config.workspace}`);
   console.log(`  Vault:          ${config.vaultDir}`);
-  console.log(`  Total Backups:  ${stats.totalBackups}`);
+  console.log(`  Snapshots:      ${stats.snapshots}`);
+  console.log(`  Total Files:    ${stats.totalFiles}`);
   console.log(`  Unique Files:   ${stats.uniqueFiles}`);
   console.log(`  Total Size:     ${formatBytes(stats.totalSize)}`);
-  console.log(`  Sessions:       ${stats.sessions}`);
   
   const pidFile = getPidFilePath(config);
   if (existsSync(pidFile)) {
@@ -466,9 +445,6 @@ async function cmdStart(options: CliOptions): Promise<void> {
   
   const isWindows = process.platform === "win32";
   
-  // Detect if running as a compiled binary (bun build --compile)
-  // In bun compiled binary: process.argv[1] is a virtual path like /$bunfs/root/...
-  // or process.execPath and process.argv[1] resolve to the same file
   const isCompiledBinary = scriptPath.startsWith("/$bunfs/") || 
     resolve(process.execPath) === resolve(scriptPath);
   

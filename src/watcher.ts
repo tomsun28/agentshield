@@ -11,16 +11,29 @@ interface TrackedFile {
   timestamp: number;
 }
 
+// 待处理的文件变更
+interface PendingChange {
+  relativePath: string;
+  eventType: FileEventType;
+  content?: Buffer;
+  renamedTo?: string;
+}
+
 export class ShieldWatcher {
   private config: ShieldConfig;
   private backupManager: BackupManager;
   private watcher: FSWatcher | null = null;
   private debounceMap: Map<string, NodeJS.Timeout> = new Map();
   private debounceMs: number = 1000;
+  private batchMs: number = 2000; // 批量收集变更的时间窗口
   private log: LogFn;
   private trackedFiles: Map<string, TrackedFile> = new Map();
   private pendingRenames: Map<string, { content: Buffer; timestamp: number }> = new Map();
   private restoreLockPath: string;
+  
+  // 快照批量处理
+  private pendingChanges: Map<string, PendingChange> = new Map();
+  private batchTimeout: NodeJS.Timeout | null = null;
 
   constructor(config: ShieldConfig, backupManager: BackupManager, log?: LogFn) {
     this.config = config;
@@ -152,10 +165,12 @@ export class ShieldWatcher {
       const pending = this.pendingRenames.get(relativePath);
       if (pending) {
         this.pendingRenames.delete(relativePath);
-        const entry = this.backupManager.backupDeletedFile(relativePath, pending.content);
-        if (entry) {
-          this.log(`[🛡️ Shield] Deleted file backed up: ${relativePath}`);
-        }
+        // 使用快照方式记录删除
+        this.addPendingChange({
+          relativePath,
+          eventType: "delete",
+          content: pending.content,
+        });
       }
       this.trackedFiles.delete(relativePath);
     }, 500);
@@ -167,10 +182,13 @@ export class ShieldWatcher {
         this.pendingRenames.delete(oldPath);
         this.trackedFiles.delete(oldPath);
         
-        const entry = this.backupManager.backupRenamedFile(oldPath, newPath, pending.content);
-        if (entry) {
-          this.log(`[🛡️ Shield] Renamed file backed up: ${oldPath} → ${newPath}`);
-        }
+        // 使用快照方式记录重命名
+        this.addPendingChange({
+          relativePath: oldPath,
+          eventType: "rename",
+          content: pending.content,
+          renamedTo: newPath,
+        });
         
         this.trackFile(newPath);
         return;
@@ -181,15 +199,71 @@ export class ShieldWatcher {
   }
 
   private handleFileChange(relativePath: string, eventType: FileEventType): void {
+    // 获取变更前的内容用于备份
+    const tracked = this.trackedFiles.get(relativePath);
+    const content = tracked?.content;
+    
+    // 更新跟踪状态
     this.trackFile(relativePath);
-    const entry = this.backupManager.backupFile(relativePath, false, eventType);
-    if (entry) {
-      this.log(`[🛡️ Shield] Original version locked: ${relativePath}`);
+    
+    // 添加到待处理队列
+    this.addPendingChange({
+      relativePath,
+      eventType,
+      content,
+    });
+  }
+
+  /**
+   * 添加待处理的变更到队列，批量创建快照
+   */
+  private addPendingChange(change: PendingChange): void {
+    // 使用 Map 去重，同一文件只保留最新的变更
+    this.pendingChanges.set(change.relativePath, change);
+    
+    // 重置批量处理定时器
+    if (this.batchTimeout) {
+      clearTimeout(this.batchTimeout);
+    }
+    
+    this.batchTimeout = setTimeout(() => {
+      this.flushPendingChanges();
+    }, this.batchMs);
+  }
+
+  /**
+   * 刷新待处理的变更，创建快照
+   */
+  private flushPendingChanges(): void {
+    if (this.pendingChanges.size === 0) {
+      return;
+    }
+    
+    const changes = Array.from(this.pendingChanges.values());
+    this.pendingChanges.clear();
+    this.batchTimeout = null;
+    
+    // 创建快照
+    const snapshot = this.backupManager.createSnapshot(changes);
+    
+    if (snapshot) {
+      const fileCount = snapshot.files.length;
+      if (fileCount === 1) {
+        this.log(`[🛡️ Shield] Snapshot created: ${snapshot.files[0].path}`);
+      } else {
+        this.log(`[🛡️ Shield] Snapshot created: ${fileCount} files (${snapshot.id})`);
+        for (const file of snapshot.files) {
+          this.log(`    └─ ${file.eventType}: ${file.path}`);
+        }
+      }
     }
   }
 
   stop(): void {
     if (this.watcher) {
+      // 先刷新待处理的变更
+      this.flushPendingChanges();
+      
       this.watcher.close();
       this.watcher = null;
       
@@ -198,13 +272,12 @@ export class ShieldWatcher {
       }
       this.debounceMap.clear();
       
+      if (this.batchTimeout) {
+        clearTimeout(this.batchTimeout);
+        this.batchTimeout = null;
+      }
+      
       this.log("Shield stopped");
     }
-  }
-
-  resetSession(): void {
-    this.backupManager.resetSession();
-    this.log("─".repeat(50));
-    this.log("🔄 New session started, protection state reset");
   }
 }

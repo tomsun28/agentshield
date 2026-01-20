@@ -22,7 +22,7 @@
 npm install -g agentshield
 ```
 
-### 二进制文件安装
+### 二进制安装
 
 ```bash
 curl -fsSL https://github.com/tomsun28/agentshield/raw/main/install.sh | bash
@@ -70,16 +70,6 @@ shield exec --path=./my-project -- cargo run
 1. 在命令运行前创建完整快照
 2. 执行你的代理命令
 3. 允许你轻松恢复任何修改过的文件
-
-### 一次性快照
-
-```bash
-# 创建当前目录的快照
-shield snapshot
-
-# 创建指定目录的快照  
-shield snapshot ./my-project
-```
 
 ### 恢复文件
 
