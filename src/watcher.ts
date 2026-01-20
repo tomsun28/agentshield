@@ -11,16 +11,29 @@ interface TrackedFile {
   timestamp: number;
 }
 
+// pending change
+interface PendingChange {
+  relativePath: string;
+  eventType: FileEventType;
+  content?: Buffer;
+  renamedTo?: string;
+}
+
 export class ShieldWatcher {
   private config: ShieldConfig;
   private backupManager: BackupManager;
   private watcher: FSWatcher | null = null;
   private debounceMap: Map<string, NodeJS.Timeout> = new Map();
   private debounceMs: number = 1000;
+  private batchMs: number = 2000; // batch collect change time window
   private log: LogFn;
   private trackedFiles: Map<string, TrackedFile> = new Map();
   private pendingRenames: Map<string, { content: Buffer; timestamp: number }> = new Map();
   private restoreLockPath: string;
+  
+  // snapshot batch process
+  private pendingChanges: Map<string, PendingChange> = new Map();
+  private batchTimeout: NodeJS.Timeout | null = null;
 
   constructor(config: ShieldConfig, backupManager: BackupManager, log?: LogFn) {
     this.config = config;
@@ -149,13 +162,21 @@ export class ShieldWatcher {
     }
 
     setTimeout(() => {
+      // not record change during restore
+      if (existsSync(this.restoreLockPath)) {
+        this.pendingRenames.delete(relativePath);
+        this.trackedFiles.delete(relativePath);
+        return;
+      }
       const pending = this.pendingRenames.get(relativePath);
       if (pending) {
         this.pendingRenames.delete(relativePath);
-        const entry = this.backupManager.backupDeletedFile(relativePath, pending.content);
-        if (entry) {
-          this.log(`[🛡️ Shield] Deleted file backed up: ${relativePath}`);
-        }
+        // use snapshot to record delete
+        this.addPendingChange({
+          relativePath,
+          eventType: "delete",
+          content: pending.content,
+        });
       }
       this.trackedFiles.delete(relativePath);
     }, 500);
@@ -167,10 +188,13 @@ export class ShieldWatcher {
         this.pendingRenames.delete(oldPath);
         this.trackedFiles.delete(oldPath);
         
-        const entry = this.backupManager.backupRenamedFile(oldPath, newPath, pending.content);
-        if (entry) {
-          this.log(`[🛡️ Shield] Renamed file backed up: ${oldPath} → ${newPath}`);
-        }
+        // use the snapshot to record rename
+        this.addPendingChange({
+          relativePath: oldPath,
+          eventType: "rename",
+          content: pending.content,
+          renamedTo: newPath,
+        });
         
         this.trackFile(newPath);
         return;
@@ -181,15 +205,82 @@ export class ShieldWatcher {
   }
 
   private handleFileChange(relativePath: string, eventType: FileEventType): void {
+    // Get content before change for backup
+    const tracked = this.trackedFiles.get(relativePath);
+    const content = tracked?.content;
+    
+    // Update tracking status
     this.trackFile(relativePath);
-    const entry = this.backupManager.backupFile(relativePath, false, eventType);
-    if (entry) {
-      this.log(`[🛡️ Shield] Original version locked: ${relativePath}`);
+    
+    // Add to pending queue
+    this.addPendingChange({
+      relativePath,
+      eventType,
+      content,
+    });
+  }
+
+  /**
+   * Add pending changes to queue for batch snapshot creation
+   */
+  private addPendingChange(change: PendingChange): void {
+    // Don't record changes during restore
+    if (existsSync(this.restoreLockPath)) {
+      return;
+    }
+    // Use Map to deduplicate, keep only the latest change for each file
+    this.pendingChanges.set(change.relativePath, change);
+    
+    // Reset batch processing timer
+    if (this.batchTimeout) {
+      clearTimeout(this.batchTimeout);
+    }
+    
+    this.batchTimeout = setTimeout(() => {
+      this.flushPendingChanges();
+    }, this.batchMs);
+  }
+
+  /**
+   * flush pending changes to create snapshot
+   */
+  private flushPendingChanges(): void {
+    if (this.pendingChanges.size === 0) {
+      return;
+    }
+    
+    // not create snapshot during restore
+    if (existsSync(this.restoreLockPath)) {
+      this.pendingChanges.clear();
+      this.batchTimeout = null;
+      return;
+    }
+    
+    const changes = Array.from(this.pendingChanges.values());
+    this.pendingChanges.clear();
+    this.batchTimeout = null;
+    
+    // create snapshot
+    const snapshot = this.backupManager.createSnapshot(changes);
+    
+    if (snapshot) {
+      const fileCount = snapshot.files.length;
+      if (fileCount === 1) {
+        this.log(`[🛡️ Shield] Snapshot created: ${snapshot.files[0].path}`);
+      } else {
+        this.log(`[🛡️ Shield] Snapshot created: ${fileCount} files (${snapshot.id})`);
+        for (const file of snapshot.files) {
+          this.log(`    └─ ${file.eventType}: ${file.path}`);
+        }
+      }
     }
   }
 
   stop(): void {
     if (this.watcher) {
+      // flush pending changes
+      this.flushPendingChanges();
+      
       this.watcher.close();
       this.watcher = null;
       
@@ -198,13 +289,12 @@ export class ShieldWatcher {
       }
       this.debounceMap.clear();
       
+      if (this.batchTimeout) {
+        clearTimeout(this.batchTimeout);
+        this.batchTimeout = null;
+      }
+      
       this.log("Shield stopped");
     }
-  }
-
-  resetSession(): void {
-    this.backupManager.resetSession();
-    this.log("─".repeat(50));
-    this.log("🔄 New session started, protection state reset");
   }
 }
