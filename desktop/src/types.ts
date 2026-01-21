@@ -31,3 +31,13 @@ export interface RestoreResult {
   failed: number;
   deleted: number;
 }
+
+export interface ShieldStatus {
+  running: boolean;
+  pid: number | null;
+}
+
+export interface CommandResult {
+  success: boolean;
+  message: string;
+}

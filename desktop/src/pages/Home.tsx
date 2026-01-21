@@ -2,14 +2,16 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Shield, Plus, Folder, Trash2, Clock } from "lucide-react";
-import type { Workspace, WorkspaceStats } from "../types";
+import { Shield, Plus, Folder, Trash2, Clock, Play, Square, Loader2 } from "lucide-react";
+import type { Workspace, WorkspaceStats, ShieldStatus, CommandResult } from "../types";
 import { formatBytes, formatTimeAgo } from "../utils";
 
 export default function Home() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [stats, setStats] = useState<Record<string, WorkspaceStats>>({});
+  const [statuses, setStatuses] = useState<Record<string, ShieldStatus>>({});
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const loadWorkspaces = async () => {
@@ -18,22 +20,23 @@ export default function Home() {
       setWorkspaces(ws);
 
       const statsMap: Record<string, WorkspaceStats> = {};
+      const statusMap: Record<string, ShieldStatus> = {};
+      
       for (const w of ws) {
         try {
-          const s = await invoke<WorkspaceStats>("get_workspace_stats", {
-            workspacePath: w.path,
-          });
+          const [s, st] = await Promise.all([
+            invoke<WorkspaceStats>("get_workspace_stats", { workspacePath: w.path }),
+            invoke<ShieldStatus>("get_shield_status", { workspacePath: w.path }),
+          ]);
           statsMap[w.path] = s;
+          statusMap[w.path] = st;
         } catch {
-          statsMap[w.path] = {
-            snapshots: 0,
-            total_files: 0,
-            total_size: 0,
-            unique_files: 0,
-          };
+          statsMap[w.path] = { snapshots: 0, total_files: 0, total_size: 0, unique_files: 0 };
+          statusMap[w.path] = { running: false, pid: null };
         }
       }
       setStats(statsMap);
+      setStatuses(statusMap);
     } catch (err) {
       console.error("Failed to load workspaces:", err);
     } finally {
@@ -43,6 +46,8 @@ export default function Home() {
 
   useEffect(() => {
     loadWorkspaces();
+    const interval = setInterval(loadWorkspaces, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleAddWorkspace = async () => {
@@ -55,11 +60,40 @@ export default function Home() {
 
       if (selected) {
         await invoke("add_workspace", { path: selected });
+        setActionLoading(selected);
+        const result = await invoke<CommandResult>("start_shield", { workspacePath: selected });
+        if (!result.success) {
+          console.warn("Failed to auto-start shield:", result.message);
+        }
+        setActionLoading(null);
         await loadWorkspaces();
       }
     } catch (err) {
       console.error("Failed to add workspace:", err);
       alert(`Failed to add workspace: ${err}`);
+      setActionLoading(null);
+    }
+  };
+
+  const handleToggleShield = async (e: React.MouseEvent, path: string, isRunning: boolean) => {
+    e.stopPropagation();
+    setActionLoading(path);
+    
+    try {
+      const result = await invoke<CommandResult>(
+        isRunning ? "stop_shield" : "start_shield",
+        { workspacePath: path }
+      );
+      
+      if (!result.success) {
+        alert(result.message);
+      }
+      await loadWorkspaces();
+    } catch (err) {
+      console.error("Failed to toggle shield:", err);
+      alert(`Failed to ${isRunning ? "stop" : "start"} shield: ${err}`);
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -141,23 +175,47 @@ export default function Home() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {workspaces.map((workspace) => {
                 const workspaceStats = stats[workspace.path];
+                const status = statuses[workspace.path];
+                const isRunning = status?.running || false;
+                const isLoading = actionLoading === workspace.path;
+                
                 return (
                   <div
                     key={workspace.path}
                     onClick={() => handleCardClick(workspace)}
                     className="group relative bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-emerald-500/50 rounded-xl p-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:shadow-emerald-500/5"
                   >
-                    <button
-                      onClick={(e) => handleRemoveWorkspace(e, workspace.path)}
-                      className="absolute top-3 right-3 p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
-                      title="Remove from protection list"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="absolute top-3 right-3 flex items-center gap-1">
+                      <button
+                        onClick={(e) => handleToggleShield(e, workspace.path, isRunning)}
+                        disabled={isLoading}
+                        className={`p-2 rounded-lg transition-all cursor-pointer disabled:cursor-not-allowed ${
+                          isRunning 
+                            ? "text-emerald-400 hover:text-red-400 hover:bg-red-500/10" 
+                            : "text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10"
+                        }`}
+                        title={isRunning ? "Stop protection" : "Start protection"}
+                      >
+                        {isLoading ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : isRunning ? (
+                          <Square className="w-4 h-4" />
+                        ) : (
+                          <Play className="w-4 h-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={(e) => handleRemoveWorkspace(e, workspace.path)}
+                        className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                        title="Remove from protection list"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
 
                     <div className="flex items-start gap-3 mb-3">
-                      <div className="p-2 bg-emerald-500/10 rounded-lg shrink-0">
-                        <Folder className="w-6 h-6 text-emerald-400" />
+                      <div className={`p-2 rounded-lg shrink-0 ${isRunning ? "bg-emerald-500/20" : "bg-slate-700/50"}`}>
+                        <Folder className={`w-6 h-6 ${isRunning ? "text-emerald-400" : "text-slate-500"}`} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <h3 className="font-semibold text-white text-lg truncate">
@@ -170,6 +228,14 @@ export default function Home() {
                     </div>
 
                     <div className="flex items-center gap-4 text-sm text-slate-400">
+                      <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${
+                        isRunning 
+                          ? "bg-emerald-500/10 text-emerald-400" 
+                          : "bg-slate-700/50 text-slate-500"
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
+                        {isRunning ? "Protected" : "Stopped"}
+                      </div>
                       <div className="flex items-center gap-1">
                         <Clock className="w-4 h-4" />
                         <span>{workspaceStats?.snapshots || 0} snapshots</span>

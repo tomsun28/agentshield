@@ -13,8 +13,10 @@ import {
   X,
   Loader2,
   History,
+  Play,
+  Square,
 } from "lucide-react";
-import type { Snapshot, RestoreResult, WorkspaceStats } from "../types";
+import type { Snapshot, WorkspaceStats, ShieldStatus, CommandResult } from "../types";
 import { formatBytes, formatTimeAgo, formatDate } from "../utils";
 
 export default function WorkspaceHistory() {
@@ -25,28 +27,28 @@ export default function WorkspaceHistory() {
 
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [stats, setStats] = useState<WorkspaceStats | null>(null);
+  const [status, setStatus] = useState<ShieldStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [restoring, setRestoring] = useState<string | null>(null);
   const [restoreResult, setRestoreResult] = useState<{
     id: string;
-    result: RestoreResult;
+    success: boolean;
+    message: string;
   } | null>(null);
 
   const loadData = async () => {
     if (!decodedPath) return;
 
     try {
-      setLoading(true);
-      const [snapshotsData, statsData] = await Promise.all([
-        invoke<Snapshot[]>("get_workspace_snapshots", {
-          workspacePath: decodedPath,
-        }),
-        invoke<WorkspaceStats>("get_workspace_stats", {
-          workspacePath: decodedPath,
-        }),
+      const [snapshotsData, statsData, statusData] = await Promise.all([
+        invoke<Snapshot[]>("get_workspace_snapshots", { workspacePath: decodedPath }),
+        invoke<WorkspaceStats>("get_workspace_stats", { workspacePath: decodedPath }),
+        invoke<ShieldStatus>("get_shield_status", { workspacePath: decodedPath }),
       ]);
       setSnapshots(snapshotsData);
       setStats(statsData);
+      setStatus(statusData);
     } catch (err) {
       console.error("Failed to load data:", err);
     } finally {
@@ -56,7 +58,31 @@ export default function WorkspaceHistory() {
 
   useEffect(() => {
     loadData();
+    const interval = setInterval(loadData, 5000);
+    return () => clearInterval(interval);
   }, [decodedPath]);
+
+  const handleToggleShield = async () => {
+    if (!status) return;
+    
+    setActionLoading(true);
+    try {
+      const result = await invoke<CommandResult>(
+        status.running ? "stop_shield" : "start_shield",
+        { workspacePath: decodedPath }
+      );
+      
+      if (!result.success) {
+        alert(result.message);
+      }
+      await loadData();
+    } catch (err) {
+      console.error("Failed to toggle shield:", err);
+      alert(`Failed to ${status.running ? "stop" : "start"} shield: ${err}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const handleRestore = async (snapshotId: string) => {
     if (
@@ -71,14 +97,18 @@ export default function WorkspaceHistory() {
     setRestoreResult(null);
 
     try {
-      const result = await invoke<RestoreResult>("restore_snapshot", {
+      const result = await invoke<CommandResult>("restore_snapshot_cmd", {
         workspacePath: decodedPath,
         snapshotId,
       });
-      setRestoreResult({ id: snapshotId, result });
+      setRestoreResult({ id: snapshotId, success: result.success, message: result.message });
+      
+      if (result.success) {
+        await loadData();
+      }
     } catch (err) {
       console.error("Failed to restore:", err);
-      alert(`Failed to restore: ${err}`);
+      setRestoreResult({ id: snapshotId, success: false, message: String(err) });
     } finally {
       setRestoring(null);
     }
@@ -133,11 +163,39 @@ export default function WorkspaceHistory() {
               <ArrowLeft className="w-5 h-5 text-slate-400" />
             </button>
             <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-bold text-white truncate">
-                {workspaceName}
-              </h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-bold text-white truncate">
+                  {workspaceName}
+                </h1>
+                <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${
+                  status?.running 
+                    ? "bg-emerald-500/10 text-emerald-400" 
+                    : "bg-slate-700/50 text-slate-500"
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${status?.running ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
+                  {status?.running ? "Protected" : "Stopped"}
+                </div>
+              </div>
               <p className="text-sm text-slate-500 truncate">{decodedPath}</p>
             </div>
+            <button
+              onClick={handleToggleShield}
+              disabled={actionLoading}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                status?.running
+                  ? "bg-red-500/10 hover:bg-red-500/20 text-red-400"
+                  : "bg-emerald-500 hover:bg-emerald-600 text-white"
+              }`}
+            >
+              {actionLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : status?.running ? (
+                <Square className="w-4 h-4" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
+              {status?.running ? "Stop Protection" : "Start Protection"}
+            </button>
           </div>
         </div>
       </header>
@@ -217,24 +275,19 @@ export default function WorkspaceHistory() {
 
                   <div className="flex items-center gap-2">
                     {restoreResult?.id === snapshot.id && (
-                      <div className="flex items-center gap-1 text-sm">
-                        {restoreResult.result.restored > 0 && (
-                          <span className="text-green-400 flex items-center gap-1">
-                            <Check className="w-4 h-4" />
-                            {restoreResult.result.restored} restored
-                          </span>
+                      <div className={`flex items-center gap-1 text-sm px-3 py-1 rounded-lg ${
+                        restoreResult.success 
+                          ? "bg-green-500/10 text-green-400" 
+                          : "bg-red-500/10 text-red-400"
+                      }`}>
+                        {restoreResult.success ? (
+                          <Check className="w-4 h-4" />
+                        ) : (
+                          <X className="w-4 h-4" />
                         )}
-                        {restoreResult.result.deleted > 0 && (
-                          <span className="text-yellow-400 ml-2">
-                            {restoreResult.result.deleted} removed
-                          </span>
-                        )}
-                        {restoreResult.result.failed > 0 && (
-                          <span className="text-red-400 flex items-center gap-1 ml-2">
-                            <X className="w-4 h-4" />
-                            {restoreResult.result.failed} failed
-                          </span>
-                        )}
+                        <span className="max-w-xs truncate" title={restoreResult.message}>
+                          {restoreResult.message || (restoreResult.success ? "Restored" : "Failed")}
+                        </span>
                       </div>
                     )}
                     <button

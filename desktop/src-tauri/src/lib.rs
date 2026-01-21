@@ -1,11 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 const SHIELD_DIR: &str = ".shield";
 const CONFIG_FILE: &str = "config.json";
 const INDEX_FILE: &str = "index.json";
 const SNAPSHOTS_DIR: &str = "snapshots";
+const PID_FILE: &str = "shield.pid";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Workspace {
@@ -60,6 +62,18 @@ pub struct RestoreResult {
     pub deleted: u32,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ShieldStatus {
+    pub running: bool,
+    pub pid: Option<u32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CommandResult {
+    pub success: bool,
+    pub message: String,
+}
+
 fn get_global_config_path() -> PathBuf {
     let home = dirs::home_dir().expect("Could not find home directory");
     home.join(SHIELD_DIR).join(CONFIG_FILE)
@@ -99,6 +113,96 @@ fn get_workspace_index_path(workspace_path: &str) -> PathBuf {
 
 fn get_workspace_snapshots_dir(workspace_path: &str) -> PathBuf {
     PathBuf::from(workspace_path).join(SHIELD_DIR).join(SNAPSHOTS_DIR)
+}
+
+fn get_pid_file_path(workspace_path: &str) -> PathBuf {
+    PathBuf::from(workspace_path).join(SHIELD_DIR).join(PID_FILE)
+}
+
+fn is_process_running(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        unsafe {
+            libc::kill(pid as i32, 0) == 0
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::ptr::null_mut;
+        unsafe {
+            let handle = winapi::um::processthreadsapi::OpenProcess(
+                winapi::um::winnt::PROCESS_QUERY_LIMITED_INFORMATION,
+                0,
+                pid,
+            );
+            if handle.is_null() {
+                false
+            } else {
+                winapi::um::handleapi::CloseHandle(handle);
+                true
+            }
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        false
+    }
+}
+
+fn check_shield_running(workspace_path: &str) -> ShieldStatus {
+    let pid_file = get_pid_file_path(workspace_path);
+    
+    if !pid_file.exists() {
+        return ShieldStatus {
+            running: false,
+            pid: None,
+        };
+    }
+    
+    if let Ok(content) = fs::read_to_string(&pid_file) {
+        if let Ok(pid) = content.trim().parse::<u32>() {
+            if is_process_running(pid) {
+                return ShieldStatus {
+                    running: true,
+                    pid: Some(pid),
+                };
+            }
+        }
+    }
+    
+    ShieldStatus {
+        running: false,
+        pid: None,
+    }
+}
+
+fn find_shield_binary() -> Option<PathBuf> {
+    if let Ok(path) = which::which("shield") {
+        return Some(path);
+    }
+    
+    if let Ok(home) = std::env::var("HOME") {
+        let npm_global = PathBuf::from(&home).join(".npm-global/bin/shield");
+        if npm_global.exists() {
+            return Some(npm_global);
+        }
+        
+        let cargo_bin = PathBuf::from(&home).join(".cargo/bin/shield");
+        if cargo_bin.exists() {
+            return Some(cargo_bin);
+        }
+    }
+    
+    if let Ok(path_env) = std::env::var("PATH") {
+        for path in std::env::split_paths(&path_env) {
+            let shield_path = path.join("shield");
+            if shield_path.exists() {
+                return Some(shield_path);
+            }
+        }
+    }
+    
+    None
 }
 
 fn load_workspace_index(workspace_path: &str) -> BackupIndex {
@@ -331,6 +435,162 @@ fn clean_old_snapshots(workspace_path: String, max_age_days: i64) -> Result<(usi
     Ok((removed, freed_bytes))
 }
 
+#[tauri::command]
+fn get_shield_status(workspace_path: String) -> ShieldStatus {
+    check_shield_running(&workspace_path)
+}
+
+#[tauri::command]
+fn start_shield(workspace_path: String) -> CommandResult {
+    let shield_bin = match find_shield_binary() {
+        Some(path) => path,
+        None => {
+            return CommandResult {
+                success: false,
+                message: "Shield binary not found. Please install shield first: npm install -g agentshield".to_string(),
+            };
+        }
+    };
+    
+    let status = check_shield_running(&workspace_path);
+    if status.running {
+        return CommandResult {
+            success: true,
+            message: format!("Shield is already running (PID: {})", status.pid.unwrap_or(0)),
+        };
+    }
+    
+    let output = Command::new(&shield_bin)
+        .arg("start")
+        .arg(&workspace_path)
+        .current_dir(&workspace_path)
+        .output();
+    
+    match output {
+        Ok(result) => {
+            let stdout = String::from_utf8_lossy(&result.stdout);
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            
+            if result.status.success() {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                let new_status = check_shield_running(&workspace_path);
+                CommandResult {
+                    success: true,
+                    message: if new_status.running {
+                        format!("Shield started successfully (PID: {})", new_status.pid.unwrap_or(0))
+                    } else {
+                        format!("Shield start command completed. {}", stdout.trim())
+                    },
+                }
+            } else {
+                CommandResult {
+                    success: false,
+                    message: format!("Failed to start shield: {}{}", stdout, stderr),
+                }
+            }
+        }
+        Err(e) => CommandResult {
+            success: false,
+            message: format!("Failed to execute shield command: {}", e),
+        },
+    }
+}
+
+#[tauri::command]
+fn stop_shield(workspace_path: String) -> CommandResult {
+    let shield_bin = match find_shield_binary() {
+        Some(path) => path,
+        None => {
+            return CommandResult {
+                success: false,
+                message: "Shield binary not found".to_string(),
+            };
+        }
+    };
+    
+    let status = check_shield_running(&workspace_path);
+    if !status.running {
+        return CommandResult {
+            success: true,
+            message: "Shield is not running".to_string(),
+        };
+    }
+    
+    let output = Command::new(&shield_bin)
+        .arg("stop")
+        .arg(&workspace_path)
+        .current_dir(&workspace_path)
+        .output();
+    
+    match output {
+        Ok(result) => {
+            let stdout = String::from_utf8_lossy(&result.stdout);
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            
+            if result.status.success() {
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                CommandResult {
+                    success: true,
+                    message: format!("Shield stopped successfully. {}", stdout.trim()),
+                }
+            } else {
+                CommandResult {
+                    success: false,
+                    message: format!("Failed to stop shield: {}{}", stdout, stderr),
+                }
+            }
+        }
+        Err(e) => CommandResult {
+            success: false,
+            message: format!("Failed to execute shield command: {}", e),
+        },
+    }
+}
+
+#[tauri::command]
+fn restore_snapshot_cmd(workspace_path: String, snapshot_id: String) -> CommandResult {
+    let shield_bin = match find_shield_binary() {
+        Some(path) => path,
+        None => {
+            return CommandResult {
+                success: false,
+                message: "Shield binary not found".to_string(),
+            };
+        }
+    };
+    
+    let output = Command::new(&shield_bin)
+        .arg("restore")
+        .arg(&snapshot_id)
+        .arg("--path")
+        .arg(&workspace_path)
+        .current_dir(&workspace_path)
+        .output();
+    
+    match output {
+        Ok(result) => {
+            let stdout = String::from_utf8_lossy(&result.stdout);
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            
+            if result.status.success() {
+                CommandResult {
+                    success: true,
+                    message: stdout.trim().to_string(),
+                }
+            } else {
+                CommandResult {
+                    success: false,
+                    message: format!("{}{}", stdout, stderr).trim().to_string(),
+                }
+            }
+        }
+        Err(e) => CommandResult {
+            success: false,
+            message: format!("Failed to execute restore command: {}", e),
+        },
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -343,7 +603,11 @@ pub fn run() {
             get_workspace_snapshots,
             get_workspace_stats,
             restore_snapshot,
-            clean_old_snapshots
+            clean_old_snapshots,
+            get_shield_status,
+            start_shield,
+            stop_shield,
+            restore_snapshot_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
