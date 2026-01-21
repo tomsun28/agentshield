@@ -239,16 +239,17 @@ export class BackupManager {
   /**
    * Restore snapshot - Batch restore all files in snapshot
    */
-  restoreSnapshot(snapshotId: string): { restored: number; failed: number; deleted: number } {
+  restoreSnapshot(snapshotId: string): { restored: number; failed: number; deleted: number; skipped: number } {
     const snapshot = this.getSnapshotById(snapshotId);
     if (!snapshot) {
       console.error(`Snapshot not found: ${snapshotId}`);
-      return { restored: 0, failed: 0, deleted: 0 };
+      return { restored: 0, failed: 0, deleted: 0, skipped: 0 };
     }
 
     let restored = 0;
     let failed = 0;
     let deleted = 0;
+    let skipped = 0;
 
     for (const file of snapshot.files || []) {
       const backupFullPath = join(this.snapshotsDir, file.backupPath);
@@ -290,6 +291,11 @@ export class BackupManager {
             mkdirSync(dirname(targetPath), { recursive: true });
             copyFileSync(backupFullPath, targetPath);
             restored++;
+          } else if (file.size === 0) {
+            // No backup content means the file was new when the snapshot was taken
+            // (first change detected, no previous content to restore)
+            // Skip gracefully - the file state before this snapshot is "did not exist"
+            skipped++;
           } else {
             failed++;
           }
@@ -300,17 +306,17 @@ export class BackupManager {
       }
     }
 
-    return { restored, failed, deleted };
+    return { restored, failed, deleted, skipped };
   }
 
   /**
    * Restore to snapshot at specified timestamp
    */
-  restoreToSnapshot(timestamp: number): { restored: number; failed: number; deleted: number } {
+  restoreToSnapshot(timestamp: number): { restored: number; failed: number; deleted: number; skipped: number } {
     const snapshot = this.getSnapshotByTimestamp(timestamp);
     if (!snapshot) {
       console.error(`No snapshot found at timestamp: ${timestamp}`);
-      return { restored: 0, failed: 0, deleted: 0 };
+      return { restored: 0, failed: 0, deleted: 0, skipped: 0 };
     }
     return this.restoreSnapshot(snapshot.id);
   }

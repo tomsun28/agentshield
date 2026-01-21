@@ -180,6 +180,8 @@ async function cmdRestore(options: CliOptions): Promise<void> {
     return;
   }
 
+  let exitCode = 0;
+
   try {
     writeFileSync(restoreLockPath, `${Date.now()}`);
 
@@ -190,14 +192,21 @@ async function cmdRestore(options: CliOptions): Promise<void> {
         // Restore by snapshot ID
         console.log(`🔄 Restoring snapshot: ${idArg}...`);
         const result = backupManager.restoreSnapshot(idArg);
-        if (result.restored > 0 || result.deleted > 0) {
-          console.log(`✓ Restored ${result.restored} files, removed ${result.deleted} new files`);
+        if (result.restored > 0 || result.deleted > 0 || result.skipped > 0) {
+          const parts = [];
+          if (result.restored > 0) parts.push(`restored ${result.restored}`);
+          if (result.deleted > 0) parts.push(`removed ${result.deleted} new`);
+          if (result.skipped > 0) parts.push(`skipped ${result.skipped} (no backup needed)`);
+          console.log(`✓ ${parts.join(", ")} file(s)`);
+          if (result.failed > 0) {
+            console.log(`⚠️  ${result.failed} file(s) failed to restore`);
+          }
         } else if (result.failed > 0) {
           console.log(`✗ Failed to restore: ${result.failed} files`);
-          process.exit(1);
+          exitCode = 1;
         } else {
           console.log(`✗ Snapshot not found: ${idArg}`);
-          process.exit(1);
+          exitCode = 1;
         }
       } else {
         // Try to parse as timestamp
@@ -205,15 +214,26 @@ async function cmdRestore(options: CliOptions): Promise<void> {
         if (isNaN(timestamp)) {
           console.error(`Error: Invalid snapshot ID or timestamp: ${idArg}`);
           console.error(`  Expected: snap_XXXXX (snapshot ID) or XXXXX (timestamp)`);
-          process.exit(1);
-        }
-        console.log(`🔄 Restoring snapshot at ${new Date(timestamp).toISOString()}...`);
-        const result = backupManager.restoreToSnapshot(timestamp);
-        if (result.restored > 0 || result.deleted > 0) {
-          console.log(`✓ Restored ${result.restored} files, removed ${result.deleted} new files`);
+          exitCode = 1;
         } else {
-          console.log(`✗ No snapshot found at timestamp: ${timestamp}`);
-          process.exit(1);
+          console.log(`🔄 Restoring snapshot at ${new Date(timestamp).toISOString()}...`);
+          const result = backupManager.restoreToSnapshot(timestamp);
+          if (result.restored > 0 || result.deleted > 0 || result.skipped > 0) {
+            const parts = [];
+            if (result.restored > 0) parts.push(`restored ${result.restored}`);
+            if (result.deleted > 0) parts.push(`removed ${result.deleted} new`);
+            if (result.skipped > 0) parts.push(`skipped ${result.skipped} (no backup needed)`);
+            console.log(`✓ ${parts.join(", ")} file(s)`);
+            if (result.failed > 0) {
+              console.log(`⚠️  ${result.failed} file(s) failed to restore`);
+            }
+          } else if (result.failed > 0) {
+            console.log(`✗ Failed to restore: ${result.failed} files`);
+            exitCode = 1;
+          } else {
+            console.log(`✗ No snapshot found at timestamp: ${timestamp}`);
+            exitCode = 1;
+          }
         }
       }
       return;
@@ -227,7 +247,7 @@ async function cmdRestore(options: CliOptions): Promise<void> {
         console.log(`✓ Restored: ${fileFlag}`);
       } else {
         console.log(`✗ Failed to restore: ${fileFlag}`);
-        process.exit(1);
+        exitCode = 1;
       }
       return;
     }
@@ -270,6 +290,9 @@ async function cmdRestore(options: CliOptions): Promise<void> {
       }
     } catch {
       // ignore
+    }
+    if (exitCode !== 0) {
+      process.exit(exitCode);
     }
   }
 }
