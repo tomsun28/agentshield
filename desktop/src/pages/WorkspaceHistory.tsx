@@ -97,15 +97,13 @@ export default function WorkspaceHistory() {
     setRestoreResult(null);
 
     try {
-      const result = await invoke<CommandResult>("restore_snapshot_cmd", {
+      const result = await invoke<{ restored: number; failed: number; deleted: number }>("restore_snapshot", {
         workspacePath: decodedPath,
         snapshotId,
       });
-      setRestoreResult({ id: snapshotId, success: result.success, message: result.message });
-      
-      if (result.success) {
-        await loadData();
-      }
+      const message = `Restored ${result.restored} files, removed ${result.deleted} new files${result.failed > 0 ? `, ${result.failed} failed` : ""}`;
+      setRestoreResult({ id: snapshotId, success: result.failed === 0, message });
+      await loadData();
     } catch (err) {
       console.error("Failed to restore:", err);
       setRestoreResult({ id: snapshotId, success: false, message: String(err) });

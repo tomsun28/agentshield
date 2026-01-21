@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "AgentShield - File Protection",
+        "title": "AgentShield - Agent Protection",
         "width": 1000,
         "height": 700,
         "minWidth": 800,
@@ -32,6 +32,17 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "Protect your code from AI agent mistakes",
+    "longDescription": "AgentShield monitors your workspace and automatically creates snapshots before AI agents make changes, allowing you to easily restore files if something goes wrong.",
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
   }
 }

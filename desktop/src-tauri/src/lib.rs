@@ -313,10 +313,18 @@ fn get_workspace_stats(workspace_path: String) -> WorkspaceStats {
     }
 }
 
+fn get_restore_lock_path(workspace_path: &str) -> PathBuf {
+    PathBuf::from(workspace_path).join(SHIELD_DIR).join("restore.lock")
+}
+
 #[tauri::command]
 fn restore_snapshot(workspace_path: String, snapshot_id: String) -> Result<RestoreResult, String> {
     let index = load_workspace_index(&workspace_path);
     let snapshots_dir = get_workspace_snapshots_dir(&workspace_path);
+    let restore_lock = get_restore_lock_path(&workspace_path);
+    
+    // Create restore lock to prevent watcher from recording changes
+    fs::write(&restore_lock, format!("{}", chrono::Utc::now().timestamp_millis())).ok();
     
     let snapshot = index
         .snapshots
@@ -393,6 +401,13 @@ fn restore_snapshot(workspace_path: String, snapshot_id: String) -> Result<Resto
             _ => {}
         }
     }
+    
+    // Schedule lock removal after watcher debounce window
+    let lock_path = restore_lock.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(3500));
+        fs::remove_file(&lock_path).ok();
+    });
     
     Ok(RestoreResult {
         restored,
@@ -562,8 +577,7 @@ fn restore_snapshot_cmd(workspace_path: String, snapshot_id: String) -> CommandR
     let output = Command::new(&shield_bin)
         .arg("restore")
         .arg(&snapshot_id)
-        .arg("--path")
-        .arg(&workspace_path)
+        .arg(format!("--path={}", workspace_path))
         .current_dir(&workspace_path)
         .output();
     

@@ -134,7 +134,7 @@ export default function Home() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-white">AgentShield</h1>
-              <p className="text-sm text-slate-400">File Protection for AI Agents</p>
+              <p className="text-sm text-slate-400">Protect Your Workspaces for AI Agent</p>
             </div>
           </div>
           <button
