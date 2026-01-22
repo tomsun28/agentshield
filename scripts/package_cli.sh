@@ -7,7 +7,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DIST_DIR="$PROJECT_ROOT/releases"
-NAME="shield"
+NAME="shield_cli"
 
 # Get version from package.json
 VERSION=$(node -p "require('$PROJECT_ROOT/package.json').version")
