@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach, beforeAll, afterAll } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import {
   existsSync,
   mkdirSync,
@@ -828,7 +828,14 @@ describe("Realistic Rename Workflow", () => {
 
   test("multiple renames in same snapshot should all use hardlinks", () => {
     // Create multiple files
-    const files = [
+    interface TestFile {
+      original: string;
+      renamed: string;
+      content: string;
+      savedContent?: Buffer;
+    }
+
+    const files: TestFile[] = [
       { original: "file1.txt", renamed: "file1_new.txt", content: "Content 1" },
       { original: "file2.txt", renamed: "file2_new.txt", content: "Content 2" },
       { original: "file3.txt", renamed: "file3_new.txt", content: "Content 3" },
@@ -841,7 +848,7 @@ describe("Realistic Rename Workflow", () => {
       writeFileSync(origPath, f.content);
       const savedContent = readFileSync(origPath);
       renameSync(origPath, newPath);
-      (f as any).savedContent = savedContent;
+      f.savedContent = savedContent;
     }
 
     // Create snapshot with all renames
@@ -850,7 +857,7 @@ describe("Realistic Rename Workflow", () => {
         relativePath: f.original,
         eventType: "rename" as const,
         renamedTo: f.renamed,
-        content: (f as any).savedContent,
+        content: f.savedContent,
       }))
     );
 

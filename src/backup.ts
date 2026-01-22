@@ -12,7 +12,6 @@ import { ShieldConfig, getSnapshotsDir, getIndexPath } from "./config.js";
 import { matchesPattern, removeEmptyDirs } from "./utils.js";
 import { 
   smartBackup, 
-  BackupResult, 
   BackupMethod,
   recordBackupResult,
   getBackupStats,
