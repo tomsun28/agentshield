@@ -10,6 +10,15 @@ import {
 import { join, dirname } from "path";
 import { ShieldConfig, getSnapshotsDir, getIndexPath } from "./config.js";
 import { matchesPattern, removeEmptyDirs } from "./utils.js";
+import { 
+  smartBackup, 
+  BackupResult, 
+  BackupMethod,
+  recordBackupResult,
+  getBackupStats,
+  resetBackupStats,
+  BackupStats
+} from "./hardlink.js";
 
 export type FileEventType = "change" | "delete" | "rename" | "create";
 
@@ -20,6 +29,7 @@ export interface SnapshotFile {
   size: number;
   eventType: FileEventType;
   renamedTo?: string;     // New path when renamed
+  backupMethod?: BackupMethod; // How the file was backed up (hardlink or copy)
 }
 
 // Snapshot - A version point on the timeline
@@ -126,21 +136,35 @@ export class BackupManager {
 
         let fileSize = 0;
 
+        let backupMethod: BackupMethod = "copy";
+        const sourcePath = join(this.config.workspace, relativePath);
+
         if (eventType === "delete" || eventType === "rename") {
-          // Delete or rename: Save content before change
-          if (content) {
-            writeFileSync(backupPath, content);
-            fileSize = content.length;
+          // Delete or rename: Try hardlink first, fallback to content backup
+          const result = smartBackup(sourcePath, backupPath, eventType, content);
+          if (result.success) {
+            backupMethod = result.method;
+            fileSize = content?.length || (existsSync(sourcePath) ? statSync(sourcePath).size : 0);
+            recordBackupResult(result, fileSize);
+          } else {
+            console.error(`Backup failed for ${relativePath}: ${result.error}`);
+            continue;
           }
         } else if (eventType === "change") {
-          // Modify: Save content before change
-          if (content) {
-            writeFileSync(backupPath, content);
-            fileSize = content.length;
+          // Modify: Must use content backup (hardlink would be affected by modification)
+          const result = smartBackup(sourcePath, backupPath, "change", content);
+          if (result.success) {
+            backupMethod = result.method;
+            fileSize = content?.length || 0;
+            recordBackupResult(result, fileSize);
+          } else {
+            console.error(`Backup failed for ${relativePath}: ${result.error}`);
+            continue;
           }
         } else if (eventType === "create") {
           // New file: No need to save content, just record path
           fileSize = 0;
+          backupMethod = "copy"; // No actual backup for create
         }
 
         snapshotFiles.push({
@@ -149,6 +173,7 @@ export class BackupManager {
           size: fileSize,
           eventType,
           renamedTo,
+          backupMethod,
         });
 
       } catch (err) {
@@ -417,4 +442,66 @@ export class BackupManager {
       uniqueFiles: uniqueFiles.size,
     };
   }
+
+  /**
+   * Get hardlink backup statistics
+   */
+  getHardlinkStats(): BackupStats {
+    return getBackupStats();
+  }
+
+  /**
+   * Reset hardlink backup statistics
+   */
+  resetHardlinkStats(): void {
+    resetBackupStats();
+  }
+
+  /**
+   * Get extended stats including hardlink information
+   */
+  getExtendedStats(): {
+    snapshots: number;
+    totalFiles: number;
+    totalSize: number;
+    uniqueFiles: number;
+    hardlinkBackups: number;
+    copyBackups: number;
+    hardlinkSavedBytes: number;
+  } {
+    const basicStats = this.getStats();
+    const hardlinkStats = this.getHardlinkStats();
+
+    // Count backup methods from snapshot files
+    let hardlinkBackups = 0;
+    let copyBackups = 0;
+
+    for (const snapshot of this.index.snapshots || []) {
+      for (const file of snapshot.files || []) {
+        if (file.backupMethod === "hardlink") {
+          hardlinkBackups++;
+        } else if (file.eventType !== "create") {
+          // create events don't have actual backups
+          copyBackups++;
+        }
+      }
+    }
+
+    return {
+      ...basicStats,
+      hardlinkBackups,
+      copyBackups,
+      hardlinkSavedBytes: hardlinkStats.hardlinkSavedBytes,
+    };
+  }
 }
+
+// Re-export hardlink utilities for external use
+export type { BackupMethod, BackupStats } from "./hardlink.js";
+export { 
+  getBackupStats, 
+  resetBackupStats,
+  isHardlinked,
+  getHardlinkCount,
+  clearHardlinkCache
+} from "./hardlink.js";

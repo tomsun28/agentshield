@@ -10,7 +10,7 @@ A workspace history version management tool that protects your workspace from un
 
 ## ✨ Features
 
-- **⚡ Zero-Copy Backups** - Uses hardlinks for instant, space-efficient backups (10GB file = 1ms backup)
+- **⚡ Zero-Copy Backups** - Uses hardlinks for instant, space-efficient backups
 - **🕵️ Real-time Protection** - Watches your workspace and automatically backs up files before changes
 - **📦 Smart Exclusions** - Automatically ignores `.git`, `node_modules`, build artifacts, etc.
 - **🔒 Atomic Exec Mode** - Snapshot entire workspace before running agent commands

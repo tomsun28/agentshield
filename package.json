@@ -25,7 +25,9 @@
     "build:bin:all": "bash scripts/package_cli.sh",
     "prepublishOnly": "bun run build:npm",
     "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix"
+    "lint:fix": "eslint src --ext .ts --fix",
+    "test": "bun test",
+    "test:hardlink": "bun test src/hardlink.test.ts"
   },
   "keywords": [
     "agent",
