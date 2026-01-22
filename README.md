@@ -6,6 +6,8 @@ English | [中文](./README_CN.md)
 
 A workspace history version management tool that protects your workspace from unintended AI Agent modifications.
 
+![demo](./desktop/demo.png)
+
 ## ✨ Features
 
 - **⚡ Zero-Copy Backups** - Uses hardlinks for instant, space-efficient backups (10GB file = 1ms backup)
@@ -20,11 +22,11 @@ A workspace history version management tool that protects your workspace from un
 
 Download the corresponding platform installation package from the [Releases](https://github.com/tomsun28/agentshield/releases) page and extract it to install (supports Windows, macOS, Linux).
 
-`shield_desktop_darwin_arm64.dmg` (macOS arm64)
-`shield_desktop_darwin_x64.dmg` (macOS x64)
-`shield_desktop_linux_arm64.tar.gz` (Linux arm64)
-`shield_desktop_linux_x64.tar.gz` (Linux x64)
-`shield_desktop_win_x64.exe` (Windows x64)
+- `shield_desktop_darwin_arm64.dmg` (macOS arm64)
+- `shield_desktop_darwin_x64.dmg` (macOS x64)
+- `shield_desktop_linux_arm64.tar.gz` (Linux arm64)
+- `shield_desktop_linux_x64.tar.gz` (Linux x64)
+- `shield_desktop_win_x64.exe` (Windows x64)
 
 ### CLI Version
 
@@ -42,11 +44,11 @@ curl -fsSL https://github.com/tomsun28/agentshield/raw/main/install.sh | bash
 
 Or download the executable binary for your platform from the [Releases](https://github.com/tomsun28/agentshield/releases) page (supports Windows, macOS, Linux).
 
-`shield_cli_darwin_arm64` (macOS arm64)
-`shield_cli_darwin_x64` (macOS x64)
-`shield_cli_linux_arm64` (Linux arm64)
-`shield_cli_linux_x64` (Linux x64)
-`shield_cli_win_x64.exe` (Windows x64)
+- `shield_cli_darwin_arm64` (macOS arm64)
+- `shield_cli_darwin_x64` (macOS x64)
+- `shield_cli_linux_arm64` (Linux arm64)
+- `shield_cli_linux_x64` (Linux x64)
+- `shield_cli_win_x64.exe` (Windows x64)
 
 ## 📖 Usage
 

@@ -6,6 +6,8 @@
 
 一个工作区历史版本管理工具，保护你的工作区免受 AI Agent 意外修改。
 
+![demo](./desktop/demo.png)
+
 ## ✨ 核心特性
 
 - **⚡ 零拷贝备份** - 使用硬链接实现即时、节省空间的备份（10GB 文件 = 1ms 完成备份）
@@ -20,11 +22,11 @@
 
 从 [Releases](https://github.com/tomsun28/agentshield/releases) 页面下载对应平台的安装包解压安装即可（支持 Windows, macOS, Linux）。
 
-`shield_desktop_darwin_arm64.dmg` (macOS arm64)
-`shield_desktop_darwin_x64.dmg` (macOS x64)
-`shield_desktop_linux_arm64.tar.gz` (Linux arm64)
-`shield_desktop_linux_x64.tar.gz` (Linux x64)
-`shield_desktop_win_x64.exe` (Windows x64)
+- `shield_desktop_darwin_arm64.dmg` (macOS arm64)
+- `shield_desktop_darwin_x64.dmg` (macOS x64)
+- `shield_desktop_linux_arm64.tar.gz` (Linux arm64)
+- `shield_desktop_linux_x64.tar.gz` (Linux x64)
+- `shield_desktop_win_x64.exe` (Windows x64)
 
 ### CLI 版
 
@@ -42,11 +44,11 @@ curl -fsSL https://github.com/tomsun28/agentshield/raw/main/install.sh | bash
 
 或者从 [Releases](https://github.com/tomsun28/agentshield/releases) 页面下载对应平台的二进制可执行文件（支持 Windows, macOS, Linux）。
 
-`shield_cli_darwin_arm64` (macOS arm64)
-`shield_cli_darwin_x64` (macOS x64)
-`shield_cli_linux_arm64` (Linux arm64)
-`shield_cli_linux_x64` (Linux x64)
-`shield_cli_win_x64.exe` (Windows x64)
+- `shield_cli_darwin_arm64` (macOS arm64)
+- `shield_cli_darwin_x64` (macOS x64)
+- `shield_cli_linux_arm64` (Linux arm64)
+- `shield_cli_linux_x64` (Linux x64)
+- `shield_cli_win_x64.exe` (Windows x64)
 
 ## 📖 使用方法
 
