@@ -141,10 +141,19 @@ export class BackupManager {
 
         if (eventType === "delete" || eventType === "rename") {
           // Delete or rename: Try hardlink first, fallback to content backup
-          const result = smartBackup(sourcePath, backupPath, eventType, content);
+          // For rename, pass the new path so we can create hardlink from there if original is gone
+          const renamedToFullPath = renamedTo ? join(this.config.workspace, renamedTo) : undefined;
+          const result = smartBackup(sourcePath, backupPath, eventType, content, renamedToFullPath);
           if (result.success) {
             backupMethod = result.method;
-            fileSize = content?.length || (existsSync(sourcePath) ? statSync(sourcePath).size : 0);
+            // Get file size: try source first, then renamedTo path, then content length
+            if (existsSync(sourcePath)) {
+              fileSize = statSync(sourcePath).size;
+            } else if (renamedToFullPath && existsSync(renamedToFullPath)) {
+              fileSize = statSync(renamedToFullPath).size;
+            } else {
+              fileSize = content?.length || 0;
+            }
             recordBackupResult(result, fileSize);
           } else {
             console.error(`Backup failed for ${relativePath}: ${result.error}`);

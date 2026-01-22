@@ -175,6 +175,40 @@ describe("Hardlink Utilities", () => {
       expect(result.method).toBe("copy");
       expect(readFileSync(backupFile, "utf-8")).toBe("Preserved content");
     });
+
+    test("should use hardlink from renamedTo path when source is gone for rename event", () => {
+      const originalFile = join(WORKSPACE_DIR, "original-gone.txt");
+      const renamedFile = join(WORKSPACE_DIR, "renamed-exists.txt");
+      const backupFile = join(BACKUP_DIR, "original-gone.backup");
+
+      // Only the renamed file exists
+      writeFileSync(renamedFile, "Content after rename");
+
+      const result = smartBackup(originalFile, backupFile, "rename", undefined, renamedFile);
+
+      expect(result.success).toBe(true);
+      expect(result.method).toBe("hardlink");
+      expect(existsSync(backupFile)).toBe(true);
+      
+      // Verify it's a hardlink (same inode)
+      const renamedStat = statSync(renamedFile);
+      const backupStat = statSync(backupFile);
+      expect(renamedStat.ino).toBe(backupStat.ino);
+    });
+
+    test("should fallback to content when both source and renamedTo are gone", () => {
+      const originalFile = join(WORKSPACE_DIR, "both-gone-original.txt");
+      const renamedFile = join(WORKSPACE_DIR, "both-gone-renamed.txt");
+      const backupFile = join(BACKUP_DIR, "both-gone.backup");
+      const content = Buffer.from("Fallback content");
+
+      // Neither file exists
+      const result = smartBackup(originalFile, backupFile, "rename", content, renamedFile);
+
+      expect(result.success).toBe(true);
+      expect(result.method).toBe("copy");
+      expect(readFileSync(backupFile, "utf-8")).toBe("Fallback content");
+    });
   });
 
   describe("backupFromBuffer", () => {
@@ -417,6 +451,60 @@ describe("BackupManager with Hardlinks", () => {
     });
   });
 
+  describe("Scenario: Rename file (original already gone)", () => {
+    test("should create hardlink from new path when original is gone", () => {
+      const originalFile = join(WORKSPACE_DIR, "original.txt");
+      const renamedFile = join(WORKSPACE_DIR, "renamed.txt");
+
+      writeFileSync(originalFile, "Original file content for rename test");
+      const content = readFileSync(originalFile);
+
+      // Simulate rename happening BEFORE backup (realistic watcher scenario)
+      renameSync(originalFile, renamedFile);
+      expect(existsSync(originalFile)).toBe(false);
+      expect(existsSync(renamedFile)).toBe(true);
+
+      // Now create snapshot - original is gone, but renamedTo path exists
+      const snapshot = manager.createSnapshot([
+        {
+          relativePath: "original.txt",
+          eventType: "rename",
+          renamedTo: "renamed.txt",
+          content,
+        },
+      ]);
+
+      expect(snapshot).not.toBeNull();
+      // Should still use hardlink by using the new path!
+      expect(snapshot!.files[0].backupMethod).toBe("hardlink");
+      expect(snapshot!.files[0].renamedTo).toBe("renamed.txt");
+      expect(snapshot!.files[0].size).toBeGreaterThan(0);
+
+      // Verify the backup file is actually a hardlink to the renamed file
+      const backupPath = join(
+        WORKSPACE_DIR,
+        ".shield",
+        "snapshots",
+        snapshot!.files[0].backupPath
+      );
+      expect(existsSync(backupPath)).toBe(true);
+      
+      // Both should have nlink > 1 if hardlinked
+      const renamedStat = statSync(renamedFile);
+      const backupStat = statSync(backupPath);
+      expect(renamedStat.ino).toBe(backupStat.ino); // Same inode = hardlink
+      expect(renamedStat.nlink).toBe(2);
+
+      // Restore should work correctly
+      const restoreResult = manager.restoreSnapshot(snapshot!.id);
+      expect(restoreResult.restored).toBe(1);
+      expect(restoreResult.deleted).toBe(1);
+      expect(existsSync(originalFile)).toBe(true);
+      expect(existsSync(renamedFile)).toBe(false);
+      expect(readFileSync(originalFile, "utf-8")).toBe("Original file content for rename test");
+    });
+  });
+
   describe("Scenario: Move file", () => {
     test("should handle move as rename with different path", () => {
       const originalFile = join(WORKSPACE_DIR, "file.txt");
@@ -649,5 +737,136 @@ describe("Hardlink Preservation After Delete", () => {
     expect(existsSync(backupFile)).toBe(true);
     expect(readFileSync(backupFile, "utf-8")).toBe("Important data");
     expect(getHardlinkCount(backupFile)).toBe(1); // Now only 1 link
+  });
+});
+
+describe("Realistic Rename Workflow", () => {
+  let manager: BackupManager;
+
+  beforeEach(() => {
+    setupTestDirs();
+    clearHardlinkCache();
+
+    const config = getDefaultConfig(WORKSPACE_DIR);
+    manager = new BackupManager(config);
+    manager.resetHardlinkStats();
+  });
+
+  afterEach(() => {
+    cleanupTestDirs();
+  });
+
+  test("full rename workflow: file renamed before backup is created", () => {
+    // This simulates what happens in the real watcher:
+    // 1. File A exists
+    // 2. User renames A -> B
+    // 3. Watcher detects A is gone, saves content to pendingRenames
+    // 4. Watcher detects B appears, matches with pending rename
+    // 5. Snapshot is created AFTER the rename has completed
+    // 6. At this point, A doesn't exist, only B exists
+    // 7. We should still create a hardlink from B (not copy from content)
+
+    const originalPath = "document.txt";
+    const renamedPath = "document_renamed.txt";
+    const originalFile = join(WORKSPACE_DIR, originalPath);
+    const renamedFile = join(WORKSPACE_DIR, renamedPath);
+    const content = "Important document content that should be hardlinked";
+
+    // Step 1: Create original file
+    writeFileSync(originalFile, content);
+    const originalContent = readFileSync(originalFile);
+
+    // Step 2: Simulate rename (this happens before backup)
+    renameSync(originalFile, renamedFile);
+    expect(existsSync(originalFile)).toBe(false);
+    expect(existsSync(renamedFile)).toBe(true);
+
+    // Step 3: Create snapshot (mimics watcher behavior after detecting rename)
+    const snapshot = manager.createSnapshot([
+      {
+        relativePath: originalPath,
+        eventType: "rename",
+        renamedTo: renamedPath,
+        content: originalContent, // Watcher saved this before file was renamed
+      },
+    ]);
+
+    expect(snapshot).not.toBeNull();
+    expect(snapshot!.files.length).toBe(1);
+
+    const snapshotFile = snapshot!.files[0];
+    expect(snapshotFile.path).toBe(originalPath);
+    expect(snapshotFile.eventType).toBe("rename");
+    expect(snapshotFile.renamedTo).toBe(renamedPath);
+    
+    // KEY ASSERTION: Should use hardlink even though original is gone
+    expect(snapshotFile.backupMethod).toBe("hardlink");
+    expect(snapshotFile.size).toBeGreaterThan(0);
+
+    // Verify the backup file exists and is a hardlink to renamedFile
+    const backupFullPath = join(
+      WORKSPACE_DIR,
+      ".shield",
+      "snapshots",
+      snapshotFile.backupPath
+    );
+    expect(existsSync(backupFullPath)).toBe(true);
+
+    const renamedStat = statSync(renamedFile);
+    const backupStat = statSync(backupFullPath);
+    expect(renamedStat.ino).toBe(backupStat.ino); // Same inode = hardlink
+    expect(renamedStat.nlink).toBe(2); // Two links: renamed file + backup
+
+    // Step 4: Restore should work correctly
+    const restoreResult = manager.restoreSnapshot(snapshot!.id);
+    expect(restoreResult.restored).toBe(1);
+    expect(restoreResult.deleted).toBe(1);
+    expect(existsSync(originalFile)).toBe(true);
+    expect(existsSync(renamedFile)).toBe(false);
+    expect(readFileSync(originalFile, "utf-8")).toBe(content);
+  });
+
+  test("multiple renames in same snapshot should all use hardlinks", () => {
+    // Create multiple files
+    const files = [
+      { original: "file1.txt", renamed: "file1_new.txt", content: "Content 1" },
+      { original: "file2.txt", renamed: "file2_new.txt", content: "Content 2" },
+      { original: "file3.txt", renamed: "file3_new.txt", content: "Content 3" },
+    ];
+
+    // Create and then rename all files
+    for (const f of files) {
+      const origPath = join(WORKSPACE_DIR, f.original);
+      const newPath = join(WORKSPACE_DIR, f.renamed);
+      writeFileSync(origPath, f.content);
+      const savedContent = readFileSync(origPath);
+      renameSync(origPath, newPath);
+      (f as any).savedContent = savedContent;
+    }
+
+    // Create snapshot with all renames
+    const snapshot = manager.createSnapshot(
+      files.map((f) => ({
+        relativePath: f.original,
+        eventType: "rename" as const,
+        renamedTo: f.renamed,
+        content: (f as any).savedContent,
+      }))
+    );
+
+    expect(snapshot).not.toBeNull();
+    expect(snapshot!.files.length).toBe(3);
+
+    // All should use hardlink
+    for (const file of snapshot!.files) {
+      expect(file.backupMethod).toBe("hardlink");
+      expect(file.eventType).toBe("rename");
+    }
+
+    // Verify hardlink count on renamed files
+    for (const f of files) {
+      const renamedPath = join(WORKSPACE_DIR, f.renamed);
+      expect(getHardlinkCount(renamedPath)).toBe(2);
+    }
   });
 });

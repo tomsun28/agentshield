@@ -124,13 +124,19 @@ async function cmdWatch(options: CliOptions): Promise<void> {
   
   const log = createLogger(logFilePath);
   
-  if (!isDaemon) {
-    const existingPid = checkExistingProcess(config);
-    if (existingPid !== null) {
-      log(`❌ Shield is already running in this workspace (PID: ${existingPid})`);
-      log(`   Use 'shield stop' to stop it first, or 'shield status' to check.`);
-      process.exit(1);
-    }
+  // Always check for existing process, even in daemon mode
+  const existingPid = checkExistingProcess(config);
+  if (existingPid !== null && existingPid !== process.pid) {
+    log(`❌ Shield is already running in this workspace (PID: ${existingPid})`);
+    log(`   Use 'shield stop' to stop it first, or 'shield status' to check.`);
+    process.exit(1);
+  }
+  
+  // In daemon mode, ensure we write our PID (parent may have written child PID already,
+  // but we verify it matches)
+  if (isDaemon) {
+    const pidFile = getPidFilePath(config);
+    writeFileSync(pidFile, process.pid.toString());
   }
   
   const backupManager = new BackupManager(config);

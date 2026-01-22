@@ -31,6 +31,9 @@ export class ShieldWatcher {
   private pendingRenames: Map<string, { content: Buffer; timestamp: number }> = new Map();
   private restoreLockPath: string;
   
+  // Track recently renamed files to prevent duplicate change events
+  private recentlyRenamed: Set<string> = new Set();
+  
   // snapshot batch process
   private pendingChanges: Map<string, PendingChange> = new Map();
   private batchTimeout: NodeJS.Timeout | null = null;
@@ -183,6 +186,11 @@ export class ShieldWatcher {
   }
 
   private handlePotentialRename(newPath: string): void {
+    // Skip if this file was just renamed to (prevents duplicate events)
+    if (this.recentlyRenamed.has(newPath)) {
+      return;
+    }
+    
     for (const [oldPath, pending] of this.pendingRenames.entries()) {
       if (oldPath !== newPath) {
         this.pendingRenames.delete(oldPath);
@@ -196,6 +204,12 @@ export class ShieldWatcher {
           renamedTo: newPath,
         });
         
+        // Mark as recently renamed to prevent duplicate change events
+        this.recentlyRenamed.add(newPath);
+        setTimeout(() => {
+          this.recentlyRenamed.delete(newPath);
+        }, this.debounceMs + 500);
+        
         this.trackFile(newPath);
         return;
       }
@@ -205,6 +219,11 @@ export class ShieldWatcher {
   }
 
   private handleFileChange(relativePath: string, eventType: FileEventType): void {
+    // Skip if this file was just renamed to (prevents duplicate events)
+    if (this.recentlyRenamed.has(relativePath)) {
+      return;
+    }
+    
     // Get content before change for backup
     const tracked = this.trackedFiles.get(relativePath);
     const content = tracked?.content;
@@ -293,6 +312,10 @@ export class ShieldWatcher {
         clearTimeout(this.batchTimeout);
         this.batchTimeout = null;
       }
+      
+      // Clean up state
+      this.recentlyRenamed.clear();
+      this.pendingRenames.clear();
       
       this.log("Shield stopped");
     }

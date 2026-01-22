@@ -231,12 +231,14 @@ export function backupFromBuffer(content: Buffer, targetPath: string): BackupRes
  * @param targetPath - Backup destination path
  * @param eventType - Type of file event
  * @param content - Optional content buffer (for CHANGE events with pre-read content)
+ * @param renamedTo - Optional new path for rename events (to create hardlink from new location)
  */
 export function smartBackup(
   sourcePath: string,
   targetPath: string,
   eventType: "delete" | "rename" | "change" | "create",
-  content?: Buffer
+  content?: Buffer,
+  renamedTo?: string
 ): BackupResult {
   switch (eventType) {
     case "create":
@@ -252,6 +254,10 @@ export function smartBackup(
       // Hardlink is ideal here since the original will be removed
       if (existsSync(sourcePath)) {
         return createHardlinkBackup(sourcePath, targetPath);
+      } else if (eventType === "rename" && renamedTo && existsSync(renamedTo)) {
+        // For rename: original path gone, but new path has the same content
+        // Create hardlink from the new location
+        return createHardlinkBackup(renamedTo, targetPath);
       } else if (content) {
         // File already removed, use provided content
         return backupFromBuffer(content, targetPath);
