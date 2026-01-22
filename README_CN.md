@@ -16,19 +16,37 @@
 
 ## 🚀 安装
 
-### 通过 npm 安装
+### 桌面版
+
+从 [Releases](https://github.com/tomsun28/agentshield/releases) 页面下载对应平台的安装包解压安装即可（支持 Windows, macOS, Linux）。
+
+`shield_desktop_darwin_arm64.dmg` (macOS arm64)
+`shield_desktop_darwin_x64.dmg` (macOS x64)
+`shield_desktop_linux_arm64.tar.gz` (Linux arm64)
+`shield_desktop_linux_x64.tar.gz` (Linux x64)
+`shield_desktop_win_x64.exe` (Windows x64)
+
+### CLI 版
+
+**通过 npm 安装**
 
 ```bash
 npm install -g agentshield
 ```
 
-### 二进制安装
+**通过二进制安装**
 
 ```bash
 curl -fsSL https://github.com/tomsun28/agentshield/raw/main/install.sh | bash
 ```
 
 或者从 [Releases](https://github.com/tomsun28/agentshield/releases) 页面下载对应平台的二进制可执行文件（支持 Windows, macOS, Linux）。
+
+`shield_cli_darwin_arm64` (macOS arm64)
+`shield_cli_darwin_x64` (macOS x64)
+`shield_cli_linux_arm64` (Linux arm64)
+`shield_cli_linux_x64` (Linux x64)
+`shield_cli_win_x64.exe` (Windows x64)
 
 ## 📖 使用方法
 

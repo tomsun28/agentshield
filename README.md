@@ -16,19 +16,37 @@ A workspace history version management tool that protects your workspace from un
 
 ## 🚀 Installation
 
-### Via npm
+### Desktop Version
+
+Download the corresponding platform installation package from the [Releases](https://github.com/tomsun28/agentshield/releases) page and extract it to install (supports Windows, macOS, Linux).
+
+`shield_desktop_darwin_arm64.dmg` (macOS arm64)
+`shield_desktop_darwin_x64.dmg` (macOS x64)
+`shield_desktop_linux_arm64.tar.gz` (Linux arm64)
+`shield_desktop_linux_x64.tar.gz` (Linux x64)
+`shield_desktop_win_x64.exe` (Windows x64)
+
+### CLI Version
+
+**Via npm installation**
 
 ```bash
 npm install -g agentshield
 ```
 
-### Via Binary 
+**Via binary installation**
 
 ```bash
 curl -fsSL https://github.com/tomsun28/agentshield/raw/main/install.sh | bash
 ```
 
 Or download the executable binary for your platform from the [Releases](https://github.com/tomsun28/agentshield/releases) page (supports Windows, macOS, Linux).
+
+`shield_cli_darwin_arm64` (macOS arm64)
+`shield_cli_darwin_x64` (macOS x64)
+`shield_cli_linux_arm64` (Linux arm64)
+`shield_cli_linux_x64` (Linux x64)
+`shield_cli_win_x64.exe` (Windows x64)
 
 ## 📖 Usage
 
@@ -50,7 +68,7 @@ shield watch
 # Watch specific directory (foreground)
 shield watch ./my-project
 
-# Stop background watch
+# Stop background process
 shield stop
 shield stop ./my-project
 
@@ -61,11 +79,11 @@ shield status
 ### Restore Files
 
 ```bash
-# List all backups with snapshot ID
+# List all changes and snapshot points
 shield list
 
 # Restore a specific snapshot by ID or timestamp
-shield restore <id> 
+shield restore <id>
 ```
 
 ### Status and Cleanup
