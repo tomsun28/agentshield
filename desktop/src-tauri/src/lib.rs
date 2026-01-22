@@ -176,7 +176,43 @@ fn check_shield_running(workspace_path: &str) -> ShieldStatus {
     }
 }
 
+fn find_bundled_shield_binary() -> Option<PathBuf> {
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            #[cfg(target_os = "macos")]
+            {
+                let resources_dir = exe_dir.join("../Resources");
+                let shield_path = resources_dir.join("shield");
+                if shield_path.exists() {
+                    return Some(shield_path);
+                }
+            }
+            
+            #[cfg(target_os = "linux")]
+            {
+                let shield_path = exe_dir.join("shield");
+                if shield_path.exists() {
+                    return Some(shield_path);
+                }
+            }
+            
+            #[cfg(target_os = "windows")]
+            {
+                let shield_path = exe_dir.join("shield.exe");
+                if shield_path.exists() {
+                    return Some(shield_path);
+                }
+            }
+        }
+    }
+    None
+}
+
 fn find_shield_binary() -> Option<PathBuf> {
+    if let Some(bundled) = find_bundled_shield_binary() {
+        return Some(bundled);
+    }
+    
     if let Ok(path) = which::which("shield") {
         return Some(path);
     }
