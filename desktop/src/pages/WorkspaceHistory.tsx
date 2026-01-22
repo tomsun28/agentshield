@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { ask } from "@tauri-apps/plugin-dialog";
 import {
   ArrowLeft,
   Clock,
@@ -85,11 +86,15 @@ export default function WorkspaceHistory() {
   };
 
   const handleRestore = async (snapshotId: string) => {
-    if (
-      !confirm(
-        "Are you sure you want to restore this snapshot? This will revert files to their previous state."
-      )
-    ) {
+    const confirmed = await ask(
+      "Are you sure you want to restore this snapshot? This will revert files to their previous state.",
+      {
+        title: "Confirm Restore",
+        kind: "warning",
+      }
+    );
+
+    if (!confirmed) {
       return;
     }
 
