@@ -6,6 +6,8 @@ import { BackupManager } from "./backup.js";
 import { ShieldWatcher } from "./watcher.js";
 import { formatBytes, formatTimeAgo } from "./utils.js";
 
+const SHIELD_VERSION = "0.0.5";
+
 interface CliOptions {
   command: string;
   args: string[];
@@ -49,6 +51,7 @@ Commands:
   restore                Restore files from a snapshot
   clean [--days=N]       Remove snapshots older than N days (default: 7)
   status                 Show statistics
+  version                Show version information
   help                   Show this help message
 
 Restore Options:
@@ -70,6 +73,7 @@ Examples:
   shield restore --file=src/index.ts
   shield clean --days=3
   shield status
+  shield version
 `);
 }
 
@@ -98,11 +102,20 @@ export async function runCli(argv: string[]): Promise<void> {
     case "status":
       await cmdStatus(options);
       break;
+    case "version":
+    case "-v":
+    case "--version":
+      await cmdVersion();
+      break;
     case "help":
     default:
       printHelp();
       break;
   }
+}
+
+async function cmdVersion(): Promise<void> {
+  console.log(`Shield v${SHIELD_VERSION}`);
 }
 
 async function getConfig(options: CliOptions): Promise<ShieldConfig> {

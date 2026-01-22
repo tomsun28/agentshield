@@ -133,7 +133,10 @@ export default function Home() {
               <Shield className="w-8 h-8 text-emerald-400" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">AgentShield</h1>
+              <div className="flex items-baseline gap-2">
+                <h1 className="text-xl font-bold text-white">AgentShield</h1>
+                <span className="text-xs text-slate-500 font-mono">v{__APP_VERSION__}</span>
+              </div>
               <p className="text-sm text-slate-400">Protect AI-Operated Workspaces</p>
             </div>
           </div>
