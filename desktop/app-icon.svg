@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="mainGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="darkGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e293b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f172a;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Base Shield Shape -->
+  <path d="M256 32C130 32 64 96 64 96V224C64 366.6 142.6 462.4 256 496C369.4 462.4 448 366.6 448 224V96C448 96 382 32 256 32Z" fill="url(#darkGrad)"/>
+  
+  <!-- Glowing Border/Circuit -->
+  <path d="M256 52C140 52 84 106 84 106V224C84 350 156 438 256 470C356 438 428 350 428 224V106C428 106 372 52 256 52Z" fill="none" stroke="url(#mainGrad)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Internal Agent "Eye/Core" -->
+  <circle cx="256" cy="240" r="45" fill="url(#mainGrad)" filter="url(#glow)"/>
+  
+  <!-- Tech Rings representing data/scanning -->
+  <path d="M256 160C211.8 160 176 195.8 176 240C176 260 183.3 278.3 195.5 292.5" fill="none" stroke="#10b981" stroke-width="8" stroke-linecap="round" opacity="0.8"/>
+  <path d="M256 320C300.2 320 336 284.2 336 240C336 220 328.7 201.7 316.5 187.5" fill="none" stroke="#3b82f6" stroke-width="8" stroke-linecap="round" opacity="0.8"/>
+  
+  <!-- Connectivity Nodes -->
+  <circle cx="256" cy="130" r="8" fill="#10b981"/>
+  <circle cx="256" cy="350" r="8" fill="#3b82f6"/>
+  <circle cx="140" cy="240" r="6" fill="#ffffff" opacity="0.4"/>
+  <circle cx="372" cy="240" r="6" fill="#ffffff" opacity="0.4"/>
+</svg>

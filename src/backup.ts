@@ -10,6 +10,14 @@ import {
 import { join, dirname } from "path";
 import { ShieldConfig, getSnapshotsDir, getIndexPath } from "./config.js";
 import { matchesPattern, removeEmptyDirs } from "./utils.js";
+import { 
+  smartBackup, 
+  BackupMethod,
+  recordBackupResult,
+  getBackupStats,
+  resetBackupStats,
+  BackupStats
+} from "./hardlink.js";
 
 export type FileEventType = "change" | "delete" | "rename" | "create";
 
@@ -20,6 +28,7 @@ export interface SnapshotFile {
   size: number;
   eventType: FileEventType;
   renamedTo?: string;     // New path when renamed
+  backupMethod?: BackupMethod; // How the file was backed up (hardlink or copy)
 }
 
 // Snapshot - A version point on the timeline
@@ -126,21 +135,44 @@ export class BackupManager {
 
         let fileSize = 0;
 
+        let backupMethod: BackupMethod = "copy";
+        const sourcePath = join(this.config.workspace, relativePath);
+
         if (eventType === "delete" || eventType === "rename") {
-          // Delete or rename: Save content before change
-          if (content) {
-            writeFileSync(backupPath, content);
-            fileSize = content.length;
+          // Delete or rename: Try hardlink first, fallback to content backup
+          // For rename, pass the new path so we can create hardlink from there if original is gone
+          const renamedToFullPath = renamedTo ? join(this.config.workspace, renamedTo) : undefined;
+          const result = smartBackup(sourcePath, backupPath, eventType, content, renamedToFullPath);
+          if (result.success) {
+            backupMethod = result.method;
+            // Get file size: try source first, then renamedTo path, then content length
+            if (existsSync(sourcePath)) {
+              fileSize = statSync(sourcePath).size;
+            } else if (renamedToFullPath && existsSync(renamedToFullPath)) {
+              fileSize = statSync(renamedToFullPath).size;
+            } else {
+              fileSize = content?.length || 0;
+            }
+            recordBackupResult(result, fileSize);
+          } else {
+            console.error(`Backup failed for ${relativePath}: ${result.error}`);
+            continue;
           }
         } else if (eventType === "change") {
-          // Modify: Save content before change
-          if (content) {
-            writeFileSync(backupPath, content);
-            fileSize = content.length;
+          // Modify: Must use content backup (hardlink would be affected by modification)
+          const result = smartBackup(sourcePath, backupPath, "change", content);
+          if (result.success) {
+            backupMethod = result.method;
+            fileSize = content?.length || 0;
+            recordBackupResult(result, fileSize);
+          } else {
+            console.error(`Backup failed for ${relativePath}: ${result.error}`);
+            continue;
           }
         } else if (eventType === "create") {
           // New file: No need to save content, just record path
           fileSize = 0;
+          backupMethod = "copy"; // No actual backup for create
         }
 
         snapshotFiles.push({
@@ -149,6 +181,7 @@ export class BackupManager {
           size: fileSize,
           eventType,
           renamedTo,
+          backupMethod,
         });
 
       } catch (err) {
@@ -239,16 +272,17 @@ export class BackupManager {
   /**
    * Restore snapshot - Batch restore all files in snapshot
    */
-  restoreSnapshot(snapshotId: string): { restored: number; failed: number; deleted: number } {
+  restoreSnapshot(snapshotId: string): { restored: number; failed: number; deleted: number; skipped: number } {
     const snapshot = this.getSnapshotById(snapshotId);
     if (!snapshot) {
       console.error(`Snapshot not found: ${snapshotId}`);
-      return { restored: 0, failed: 0, deleted: 0 };
+      return { restored: 0, failed: 0, deleted: 0, skipped: 0 };
     }
 
     let restored = 0;
     let failed = 0;
     let deleted = 0;
+    let skipped = 0;
 
     for (const file of snapshot.files || []) {
       const backupFullPath = join(this.snapshotsDir, file.backupPath);
@@ -290,6 +324,11 @@ export class BackupManager {
             mkdirSync(dirname(targetPath), { recursive: true });
             copyFileSync(backupFullPath, targetPath);
             restored++;
+          } else if (file.size === 0) {
+            // No backup content means the file was new when the snapshot was taken
+            // (first change detected, no previous content to restore)
+            // Skip gracefully - the file state before this snapshot is "did not exist"
+            skipped++;
           } else {
             failed++;
           }
@@ -300,17 +339,17 @@ export class BackupManager {
       }
     }
 
-    return { restored, failed, deleted };
+    return { restored, failed, deleted, skipped };
   }
 
   /**
    * Restore to snapshot at specified timestamp
    */
-  restoreToSnapshot(timestamp: number): { restored: number; failed: number; deleted: number } {
+  restoreToSnapshot(timestamp: number): { restored: number; failed: number; deleted: number; skipped: number } {
     const snapshot = this.getSnapshotByTimestamp(timestamp);
     if (!snapshot) {
       console.error(`No snapshot found at timestamp: ${timestamp}`);
-      return { restored: 0, failed: 0, deleted: 0 };
+      return { restored: 0, failed: 0, deleted: 0, skipped: 0 };
     }
     return this.restoreSnapshot(snapshot.id);
   }
@@ -411,4 +450,66 @@ export class BackupManager {
       uniqueFiles: uniqueFiles.size,
     };
   }
+
+  /**
+   * Get hardlink backup statistics
+   */
+  getHardlinkStats(): BackupStats {
+    return getBackupStats();
+  }
+
+  /**
+   * Reset hardlink backup statistics
+   */
+  resetHardlinkStats(): void {
+    resetBackupStats();
+  }
+
+  /**
+   * Get extended stats including hardlink information
+   */
+  getExtendedStats(): {
+    snapshots: number;
+    totalFiles: number;
+    totalSize: number;
+    uniqueFiles: number;
+    hardlinkBackups: number;
+    copyBackups: number;
+    hardlinkSavedBytes: number;
+  } {
+    const basicStats = this.getStats();
+    const hardlinkStats = this.getHardlinkStats();
+
+    // Count backup methods from snapshot files
+    let hardlinkBackups = 0;
+    let copyBackups = 0;
+
+    for (const snapshot of this.index.snapshots || []) {
+      for (const file of snapshot.files || []) {
+        if (file.backupMethod === "hardlink") {
+          hardlinkBackups++;
+        } else if (file.eventType !== "create") {
+          // create events don't have actual backups
+          copyBackups++;
+        }
+      }
+    }
+
+    return {
+      ...basicStats,
+      hardlinkBackups,
+      copyBackups,
+      hardlinkSavedBytes: hardlinkStats.hardlinkSavedBytes,
+    };
+  }
 }
+
+// Re-export hardlink utilities for external use
+export type { BackupMethod, BackupStats } from "./hardlink.js";
+export { 
+  getBackupStats, 
+  resetBackupStats,
+  isHardlinked,
+  getHardlinkCount,
+  clearHardlinkCache
+} from "./hardlink.js";

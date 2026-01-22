@@ -6,6 +6,8 @@ import { BackupManager } from "./backup.js";
 import { ShieldWatcher } from "./watcher.js";
 import { formatBytes, formatTimeAgo } from "./utils.js";
 
+const SHIELD_VERSION = "0.1.0";
+
 interface CliOptions {
   command: string;
   args: string[];
@@ -49,6 +51,7 @@ Commands:
   restore                Restore files from a snapshot
   clean [--days=N]       Remove snapshots older than N days (default: 7)
   status                 Show statistics
+  version                Show version information
   help                   Show this help message
 
 Restore Options:
@@ -70,6 +73,7 @@ Examples:
   shield restore --file=src/index.ts
   shield clean --days=3
   shield status
+  shield version
 `);
 }
 
@@ -98,11 +102,20 @@ export async function runCli(argv: string[]): Promise<void> {
     case "status":
       await cmdStatus(options);
       break;
+    case "version":
+    case "-v":
+    case "--version":
+      await cmdVersion();
+      break;
     case "help":
     default:
       printHelp();
       break;
   }
+}
+
+async function cmdVersion(): Promise<void> {
+  console.log(`Shield v${SHIELD_VERSION}`);
 }
 
 async function getConfig(options: CliOptions): Promise<ShieldConfig> {
@@ -124,13 +137,19 @@ async function cmdWatch(options: CliOptions): Promise<void> {
   
   const log = createLogger(logFilePath);
   
-  if (!isDaemon) {
-    const existingPid = checkExistingProcess(config);
-    if (existingPid !== null) {
-      log(`❌ Shield is already running in this workspace (PID: ${existingPid})`);
-      log(`   Use 'shield stop' to stop it first, or 'shield status' to check.`);
-      process.exit(1);
-    }
+  // Always check for existing process, even in daemon mode
+  const existingPid = checkExistingProcess(config);
+  if (existingPid !== null && existingPid !== process.pid) {
+    log(`❌ Shield is already running in this workspace (PID: ${existingPid})`);
+    log(`   Use 'shield stop' to stop it first, or 'shield status' to check.`);
+    process.exit(1);
+  }
+  
+  // In daemon mode, ensure we write our PID (parent may have written child PID already,
+  // but we verify it matches)
+  if (isDaemon) {
+    const pidFile = getPidFilePath(config);
+    writeFileSync(pidFile, process.pid.toString());
   }
   
   const backupManager = new BackupManager(config);
@@ -180,6 +199,8 @@ async function cmdRestore(options: CliOptions): Promise<void> {
     return;
   }
 
+  let exitCode = 0;
+
   try {
     writeFileSync(restoreLockPath, `${Date.now()}`);
 
@@ -190,14 +211,21 @@ async function cmdRestore(options: CliOptions): Promise<void> {
         // Restore by snapshot ID
         console.log(`🔄 Restoring snapshot: ${idArg}...`);
         const result = backupManager.restoreSnapshot(idArg);
-        if (result.restored > 0 || result.deleted > 0) {
-          console.log(`✓ Restored ${result.restored} files, removed ${result.deleted} new files`);
+        if (result.restored > 0 || result.deleted > 0 || result.skipped > 0) {
+          const parts = [];
+          if (result.restored > 0) parts.push(`restored ${result.restored}`);
+          if (result.deleted > 0) parts.push(`removed ${result.deleted} new`);
+          if (result.skipped > 0) parts.push(`skipped ${result.skipped} (no backup needed)`);
+          console.log(`✓ ${parts.join(", ")} file(s)`);
+          if (result.failed > 0) {
+            console.log(`⚠️  ${result.failed} file(s) failed to restore`);
+          }
         } else if (result.failed > 0) {
           console.log(`✗ Failed to restore: ${result.failed} files`);
-          process.exit(1);
+          exitCode = 1;
         } else {
           console.log(`✗ Snapshot not found: ${idArg}`);
-          process.exit(1);
+          exitCode = 1;
         }
       } else {
         // Try to parse as timestamp
@@ -205,15 +233,26 @@ async function cmdRestore(options: CliOptions): Promise<void> {
         if (isNaN(timestamp)) {
           console.error(`Error: Invalid snapshot ID or timestamp: ${idArg}`);
           console.error(`  Expected: snap_XXXXX (snapshot ID) or XXXXX (timestamp)`);
-          process.exit(1);
-        }
-        console.log(`🔄 Restoring snapshot at ${new Date(timestamp).toISOString()}...`);
-        const result = backupManager.restoreToSnapshot(timestamp);
-        if (result.restored > 0 || result.deleted > 0) {
-          console.log(`✓ Restored ${result.restored} files, removed ${result.deleted} new files`);
+          exitCode = 1;
         } else {
-          console.log(`✗ No snapshot found at timestamp: ${timestamp}`);
-          process.exit(1);
+          console.log(`🔄 Restoring snapshot at ${new Date(timestamp).toISOString()}...`);
+          const result = backupManager.restoreToSnapshot(timestamp);
+          if (result.restored > 0 || result.deleted > 0 || result.skipped > 0) {
+            const parts = [];
+            if (result.restored > 0) parts.push(`restored ${result.restored}`);
+            if (result.deleted > 0) parts.push(`removed ${result.deleted} new`);
+            if (result.skipped > 0) parts.push(`skipped ${result.skipped} (no backup needed)`);
+            console.log(`✓ ${parts.join(", ")} file(s)`);
+            if (result.failed > 0) {
+              console.log(`⚠️  ${result.failed} file(s) failed to restore`);
+            }
+          } else if (result.failed > 0) {
+            console.log(`✗ Failed to restore: ${result.failed} files`);
+            exitCode = 1;
+          } else {
+            console.log(`✗ No snapshot found at timestamp: ${timestamp}`);
+            exitCode = 1;
+          }
         }
       }
       return;
@@ -227,7 +266,7 @@ async function cmdRestore(options: CliOptions): Promise<void> {
         console.log(`✓ Restored: ${fileFlag}`);
       } else {
         console.log(`✗ Failed to restore: ${fileFlag}`);
-        process.exit(1);
+        exitCode = 1;
       }
       return;
     }
@@ -270,6 +309,9 @@ async function cmdRestore(options: CliOptions): Promise<void> {
       }
     } catch {
       // ignore
+    }
+    if (exitCode !== 0) {
+      process.exit(exitCode);
     }
   }
 }

@@ -42,6 +42,8 @@ export const DEFAULT_EXCLUDE_PATTERNS = [
   "**/dist/**",
   "**/build",
   "**/build/**",
+  "**/target/**",
+  "**/debug/**",
   "**/coverage",
   "**/coverage/**",
   "**/AppData/Local/Temp/**",

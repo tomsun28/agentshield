@@ -1,6 +1,6 @@
 {
   "name": "agentshield",
-  "version": "0.0.4",
+  "version": "0.1.0",
   "description": "Instant file protection for AI agent operations - hardlink-based zero-copy backup system",
   "type": "module",
   "main": "dist/index.js",
@@ -22,10 +22,12 @@
     "build:bin:linux-amd64": "bun build --compile --target=bun-linux-x64 ./src/index.ts --outfile shield",
     "build:bin:linux-arm64": "bun build --compile --target=bun-linux-arm64 ./src/index.ts --outfile shield",
     "build:bin:windows": "bun build --compile --target=bun-windows-x64 ./src/index.ts --outfile shield.exe",
-    "build:bin:all": "bash scripts/package.sh",
+    "build:bin:all": "bash scripts/package_cli.sh",
     "prepublishOnly": "bun run build:npm",
     "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix"
+    "lint:fix": "eslint src --ext .ts --fix",
+    "test": "bun test",
+    "test:hardlink": "bun test src/hardlink.test.ts"
   },
   "keywords": [
     "agent",
