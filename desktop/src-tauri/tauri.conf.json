@@ -37,7 +37,7 @@
       "icons/icon.ico"
     ],
     "category": "DeveloperTool",
-    "shortDescription": "Protect your code from AI agent mistakes",
+    "shortDescription": "Protect AI-Operated Workspaces",
     "longDescription": "AgentShield monitors your workspace and automatically creates snapshots before AI agents make changes, allowing you to easily restore files if something goes wrong.",
     "macOS": {
       "minimumSystemVersion": "10.15"
