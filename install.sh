@@ -109,7 +109,7 @@ main() {
     fi
 
     # Build download URL
-    local archive_name="${NAME}_${os}_${arch}.${ext}"
+    local archive_name="${NAME}_cli_${os}_${arch}.${ext}"
     local download_url="https://github.com/$REPO/releases/download/${version}/${archive_name}"
     
     info "Downloading ${archive_name}..."
