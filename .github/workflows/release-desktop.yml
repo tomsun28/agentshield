@@ -118,17 +118,11 @@ jobs:
             fi
           fi
 
-          # Export as base64 for Tauri CLI
-          if command -v base64 >/dev/null 2>&1; then
-            KEY_B64=$(base64 < "$KEY_PATH" | tr -d '\r\n')
-          else
-            KEY_B64=$(openssl base64 -A -in "$KEY_PATH")
-          fi
-
-          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
-          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
-            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
-          fi
+          # Export as raw content for Tauri CLI using multiline env var
+          echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> "$GITHUB_ENV"
+          cat "$KEY_PATH" >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
+          
           echo "Tauri signing key prepared"
 
       - name: Build CLI binary
@@ -147,6 +141,8 @@ jobs:
 
       - name: Build Tauri app
         working-directory: desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build --target ${{ matrix.target }}
 
       - name: Package macOS artifacts
