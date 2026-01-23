@@ -74,93 +74,54 @@ jobs:
 
       - name: Prepare Tauri signing key
         shell: bash
-        env:
-          TAURI_KEY_SECRET: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
-          if [ -z "$TAURI_KEY_SECRET" ]; then
+          if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
             echo "::warning::TAURI_SIGNING_PRIVATE_KEY not set, updater signatures will be disabled"
             exit 0
           fi
 
-          node << 'EOF'
-          const fs = require('fs');
-          
-          let raw = process.env.TAURI_KEY_SECRET || '';
-          if (!raw) {
-            console.log('No key found in env');
-            process.exit(0);
-          }
+          RAW="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
+          KEY_PATH="$RUNNER_TEMP/tauri_signing.key"
 
-          console.log('DEBUG: Raw secret length:', raw.length);
-          console.log('DEBUG: Raw secret first 50 chars:', raw.substring(0, 50));
+          # Case 1: Original two-line format (starts with "untrusted comment:")
+          if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
+            printf '%s\n' "$RAW" > "$KEY_PATH"
+            echo "Using original two-line key format"
+          else
+            # Case 2: Base64 wrapped (decode to get two lines)
+            if DECODED=$(printf '%s' "$RAW" | base64 --decode 2>/dev/null || printf '%s' "$RAW" | base64 -D 2>/dev/null) \
+               && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
+              printf '%s\n' "$DECODED" > "$KEY_PATH"
+              echo "Decoded base64 wrapped key"
+            else
+              # Case 3: Single line base64 key -> construct two-line file
+              if echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
+                ONE=$(printf '%s' "$RAW" | tr -d '\r\n')
+                printf '%s\n%s\n' "untrusted comment: tauri signing key" "$ONE" > "$KEY_PATH"
+                echo "Constructed two-line file from single-line base64 key"
+              else
+                echo "::error::TAURI_SIGNING_PRIVATE_KEY format not recognized"
+                exit 1
+              fi
+            fi
+          fi
 
-          // 1. Remove BOM and normalize line endings
-          let content = raw.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').trim();
-          console.log('DEBUG: Normalized content first 50 chars:', content.substring(0, 50));
+          # Base64 encode the entire key file and set as env var
+          if command -v base64 >/dev/null 2>&1; then
+            KEY_B64=$(base64 < "$KEY_PATH" | tr -d '\r\n')
+          elif command -v openssl >/dev/null 2>&1; then
+            KEY_B64=$(openssl base64 -A -in "$KEY_PATH")
+          else
+            KEY_B64=$(KEY_PATH="$KEY_PATH" node -e "process.stdout.write(require('fs').readFileSync(process.env.KEY_PATH).toString('base64'))")
+          fi
 
-          // 2. Decode if it looks like a base64-wrapped file (no spaces, pure base64)
-          //    We check if the *entire* content is base64 and decodes to something containing "untrusted comment"
-          if (!content.includes(' ') && !content.includes('\n') && content.length > 50) {
-             try {
-               const decoded = Buffer.from(content, 'base64').toString('utf8');
-               if (decoded.includes('untrusted comment:')) {
-                 console.log('Detected base64-encoded key file, decoded it.');
-                 content = decoded.trim();
-                 console.log('DEBUG: Decoded content first 50 chars:', content.substring(0, 50));
-               }
-             } catch (e) {
-               console.log('DEBUG: Not base64 encoded file, proceeding as raw');
-             }
-          }
+          if [ -z "$KEY_B64" ]; then
+            echo "::error::Failed to generate base64 key content"
+            exit 1
+          fi
 
-          // 3. Extract the key payload
-          //    We look for the line that is NOT the comment.
-          const lines = content.split('\n');
-          let keyPayload = '';
-          
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            if (trimmed.startsWith('untrusted comment:')) continue;
-            
-            // Assume this is the key
-            keyPayload = trimmed;
-            break; 
-          }
-
-          // If no key found yet, maybe the whole string is the key (no comment provided)
-          if (!keyPayload && !content.startsWith('untrusted comment:')) {
-            keyPayload = content.replace(/[\s\n]/g, '');
-          }
-
-          if (!keyPayload) {
-             console.error('::error::Could not extract Tauri secret key payload');
-             process.exit(1);
-          }
-
-          // 4. Sanitize payload (remove all spaces/newlines)
-          keyPayload = keyPayload.replace(/[\s\r\n]/g, '');
-          
-          console.log('Key payload extracted (length: ' + keyPayload.length + ')');
-          console.log('DEBUG: Key payload first 50 chars:', keyPayload.substring(0, 50));
-
-          // 5. Reconstruct the full 2-line Minisign key format and write to file
-          //    Tauri CLI expects a proper key file, not just the payload
-          const keyFilePath = 'tauri_signing.key';
-          const keyFileContent = `untrusted comment: minisign secret key\n${keyPayload}\n`;
-          fs.writeFileSync(keyFilePath, keyFileContent);
-          console.log('Reconstructed Minisign key file:', keyFilePath);
-          
-          // 6. Set TAURI_SIGNING_PRIVATE_KEY to the file path
-          const githubEnv = process.env.GITHUB_ENV;
-          if (githubEnv) {
-             fs.appendFileSync(githubEnv, `TAURI_SIGNING_PRIVATE_KEY=${keyFilePath}\n`);
-             console.log('Tauri signing key file path added to GITHUB_ENV');
-             console.log('DEBUG: Wrote file path to GITHUB_ENV');
-          } else {
-             console.warn('GITHUB_ENV not defined, cannot export key');
-          }
-          EOF
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
+          echo "Tauri signing key prepared (base64 encoded)"
 
       - name: Build CLI binary
         shell: bash
