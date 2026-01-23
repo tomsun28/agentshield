@@ -31,7 +31,7 @@ jobs:
             target: aarch64-apple-darwin
             os: darwin
             arch: aarch64
-          - platform: macos-13
+          - platform: macos-14
             target: x86_64-apple-darwin
             os: darwin
             arch: x86_64
@@ -58,7 +58,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
           run_install: false
 
       - name: Install Bun
