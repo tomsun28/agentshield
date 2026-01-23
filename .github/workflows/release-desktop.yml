@@ -138,20 +138,18 @@ jobs:
           
           console.log('Key payload extracted (length: ' + keyPayload.length + ')');
 
-          // 5. Output ONLY the raw key payload
-          //    The previous error "Invalid symbol 32, offset 9" (space) indicates the parser 
-          //    tried to decode "untrusted comment: ..." as base64. 
-          //    Providing just the raw base64 key bypasses this ambiguity.
-          fs.writeFileSync('tauri_signing.key', keyPayload);
-          console.log('Written raw key payload to tauri_signing.key');
+          // 5. Output ONLY the raw key payload to GITHUB_ENV directly
+          //    This avoids shell buffering/EOF issues.
+          const githubEnv = process.env.GITHUB_ENV;
+          if (githubEnv) {
+             // Append to GITHUB_ENV with correct multiline syntax
+             // We ensure we add a newline before and after to be safe
+             fs.appendFileSync(githubEnv, `TAURI_SIGNING_PRIVATE_KEY<<EOF\n${keyPayload}\nEOF\n`);
+             console.log('Tauri signing key prepared and added to GITHUB_ENV');
+          } else {
+             console.warn('GITHUB_ENV not defined, cannot export key');
+          }
           EOF
-
-          if [ -f tauri_signing.key ]; then
-            echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> "$GITHUB_ENV"
-            cat tauri_signing.key >> "$GITHUB_ENV"
-            echo "EOF" >> "$GITHUB_ENV"
-            echo "Tauri signing key prepared"
-          fi
 
       - name: Build CLI binary
         shell: bash
