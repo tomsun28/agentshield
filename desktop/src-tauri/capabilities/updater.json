@@ -1,0 +1,9 @@
+{
+  "identifier": "updater-capability",
+  "description": "Allow the app to check for and install updates",
+  "windows": ["main"],
+  "permissions": [
+    "updater:allow-check",
+    "updater:allow-download-and-install"
+  ]
+}
