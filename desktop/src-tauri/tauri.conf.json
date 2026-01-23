@@ -26,6 +26,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "resources": {
       "bin/shield*": "./"
     },
@@ -46,6 +47,14 @@
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
       "timestampUrl": ""
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUyRUQ1MTE2OTczMTYxNTAKUldSUVlUR1hGbEh0VWtzMkR0bUEzOWwwOGpsazhJMlArT1BLN3dzek04YVh1TlRKNlVaUE5TQ1UK",
+      "endpoints": [
+        "https://github.com/tomsun28/agentshield/releases/latest/download/latest.json"
+      ]
     }
   }
 }

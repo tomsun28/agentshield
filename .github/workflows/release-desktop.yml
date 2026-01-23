@@ -11,8 +11,15 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
+concurrency:
+  group: release-desktop-${{ github.ref_name }}
+  cancel-in-progress: true
+
 env:
-  APP_NAME: shield_desktop
+  APP_NAME: AgentShield
 
 jobs:
   build:
@@ -23,24 +30,25 @@ jobs:
           - platform: macos-latest
             target: aarch64-apple-darwin
             os: darwin
-            arch: arm64
+            arch: aarch64
           - platform: macos-13
             target: x86_64-apple-darwin
             os: darwin
-            arch: amd64
+            arch: x86_64
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             os: linux
-            arch: amd64
+            arch: x86_64
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             os: windows
-            arch: amd64
+            arch: x86_64
 
     runs-on: ${{ matrix.platform }}
-    
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -59,7 +67,7 @@ jobs:
           bun-version: latest
 
       - name: Setup Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
@@ -76,19 +84,66 @@ jobs:
         working-directory: desktop
         run: pnpm install
 
+      - name: Prepare Tauri signing key
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY not set, updater signatures will be disabled"
+            exit 0
+          fi
+
+          RAW="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
+          KEY_PATH="$RUNNER_TEMP/tauri_signing.key"
+
+          # Case 1: Original two-line format (starts with "untrusted comment:")
+          if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
+            printf '%s\n' "$RAW" > "$KEY_PATH"
+            echo "Using original two-line key format"
+          else
+            # Case 2: Base64 wrapped (decode to get two lines)
+            if DECODED=$(printf '%s' "$RAW" | base64 --decode 2>/dev/null || printf '%s' "$RAW" | base64 -D 2>/dev/null) \
+               && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
+              printf '%s\n' "$DECODED" > "$KEY_PATH"
+              echo "Decoded base64 wrapped key"
+            else
+              # Case 3: Single line base64 key -> construct two-line file
+              if echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
+                ONE=$(printf '%s' "$RAW" | tr -d '\r\n')
+                printf '%s\n%s\n' "untrusted comment: tauri signing key" "$ONE" > "$KEY_PATH"
+                echo "Constructed two-line file from single-line base64 key"
+              else
+                echo "::error::TAURI_SIGNING_PRIVATE_KEY format not recognized"
+                exit 1
+              fi
+            fi
+          fi
+
+          # Export as base64 for Tauri CLI
+          if command -v base64 >/dev/null 2>&1; then
+            KEY_B64=$(base64 < "$KEY_PATH" | tr -d '\r\n')
+          else
+            KEY_B64=$(openssl base64 -A -in "$KEY_PATH")
+          fi
+
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
+          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          fi
+          echo "Tauri signing key prepared"
+
       - name: Build CLI binary
+        shell: bash
         run: |
           mkdir -p desktop/src-tauri/bin
           if [ "${{ matrix.os }}" = "windows" ]; then
             bun build --compile --target=bun-windows-x64 ./src/index.ts --outfile desktop/src-tauri/bin/shield.exe
-          elif [ "${{ matrix.os }}" = "darwin" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+          elif [ "${{ matrix.os }}" = "darwin" ] && [ "${{ matrix.arch }}" = "aarch64" ]; then
             bun build --compile --target=bun-darwin-arm64 ./src/index.ts --outfile desktop/src-tauri/bin/shield
-          elif [ "${{ matrix.os }}" = "darwin" ] && [ "${{ matrix.arch }}" = "amd64" ]; then
+          elif [ "${{ matrix.os }}" = "darwin" ] && [ "${{ matrix.arch }}" = "x86_64" ]; then
             bun build --compile --target=bun-darwin-x64 ./src/index.ts --outfile desktop/src-tauri/bin/shield
           else
             bun build --compile --target=bun-linux-x64 ./src/index.ts --outfile desktop/src-tauri/bin/shield
           fi
-        shell: bash
 
       - name: Build Tauri app
         working-directory: desktop
@@ -96,60 +151,111 @@ jobs:
 
       - name: Package macOS artifacts
         if: matrix.os == 'darwin'
-        run: |
-          mkdir -p releases
-          DMG=$(find desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg -name "*.dmg" 2>/dev/null | head -1)
-          if [ -n "$DMG" ]; then
-            cp "$DMG" "releases/${APP_NAME}_${{ matrix.os }}_${{ matrix.arch }}.dmg"
-          fi
-          APP=$(find desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos -name "*.app" -type d 2>/dev/null | head -1)
-          if [ -n "$APP" ]; then
-            cd "$(dirname "$APP")"
-            tar -czf "$GITHUB_WORKSPACE/releases/${APP_NAME}_${{ matrix.os }}_${{ matrix.arch }}.tar.gz" "$(basename "$APP")"
-          fi
         shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          BUNDLE_DIR="desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+
+          # Find updater artifact (.tar.gz with signature)
+          TAR_GZ=$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.tar.gz" -type f 2>/dev/null | head -1 || true)
+          if [ -n "$TAR_GZ" ]; then
+            NEW_TAR_GZ="${APP_NAME}-${VERSION}-darwin-${{ matrix.arch }}.tar.gz"
+            cp "$TAR_GZ" "release-assets/$NEW_TAR_GZ"
+            [ -f "$TAR_GZ.sig" ] && cp "$TAR_GZ.sig" "release-assets/$NEW_TAR_GZ.sig"
+            echo "Updater artifact: $NEW_TAR_GZ"
+          fi
+
+          # Create zip from .app for direct download
+          APP_PATH=$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.app" -type d 2>/dev/null | head -1 || true)
+          if [ -n "$APP_PATH" ]; then
+            APP_NAME_BASE=$(basename "$APP_PATH")
+            NEW_ZIP="${APP_NAME}-${VERSION}-darwin-${{ matrix.arch }}.zip"
+            cd "$(dirname "$APP_PATH")"
+            ditto -c -k --sequesterRsrc --keepParent "$APP_NAME_BASE" "$NEW_ZIP"
+            mv "$NEW_ZIP" "$GITHUB_WORKSPACE/release-assets/"
+            echo "App zip: $NEW_ZIP"
+          fi
+
+          # Copy DMG if exists
+          DMG=$(find "desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -name "*.dmg" 2>/dev/null | head -1 || true)
+          if [ -n "$DMG" ]; then
+            cp "$DMG" "release-assets/${APP_NAME}-${VERSION}-darwin-${{ matrix.arch }}.dmg"
+          fi
 
       - name: Package Linux artifacts
         if: matrix.os == 'linux'
-        run: |
-          mkdir -p releases
-          APPIMAGE=$(find desktop/src-tauri/target/${{ matrix.target }}/release/bundle/appimage -name "*.AppImage" 2>/dev/null | head -1)
-          if [ -n "$APPIMAGE" ]; then
-            cp "$APPIMAGE" "releases/${APP_NAME}_${{ matrix.os }}_${{ matrix.arch }}.AppImage"
-            chmod +x "releases/${APP_NAME}_${{ matrix.os }}_${{ matrix.arch }}.AppImage"
-          fi
-          DEB=$(find desktop/src-tauri/target/${{ matrix.target }}/release/bundle/deb -name "*.deb" 2>/dev/null | head -1)
-          if [ -n "$DEB" ]; then
-            cp "$DEB" "releases/${APP_NAME}_${{ matrix.os }}_${{ matrix.arch }}.deb"
-          fi
         shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+
+          # AppImage (updater artifact)
+          APPIMAGE=$(find desktop/src-tauri/target/${{ matrix.target }}/release/bundle/appimage -name "*.AppImage" 2>/dev/null | head -1 || true)
+          if [ -n "$APPIMAGE" ]; then
+            NEW_APPIMAGE="${APP_NAME}-${VERSION}-linux-${{ matrix.arch }}.AppImage"
+            cp "$APPIMAGE" "release-assets/$NEW_APPIMAGE"
+            chmod +x "release-assets/$NEW_APPIMAGE"
+            [ -f "$APPIMAGE.sig" ] && cp "$APPIMAGE.sig" "release-assets/$NEW_APPIMAGE.sig"
+            echo "AppImage: $NEW_APPIMAGE"
+          fi
+
+          # Deb package
+          DEB=$(find desktop/src-tauri/target/${{ matrix.target }}/release/bundle/deb -name "*.deb" 2>/dev/null | head -1 || true)
+          if [ -n "$DEB" ]; then
+            cp "$DEB" "release-assets/${APP_NAME}-${VERSION}-linux-${{ matrix.arch }}.deb"
+          fi
+
+          # RPM package
+          RPM=$(find desktop/src-tauri/target/${{ matrix.target }}/release/bundle/rpm -name "*.rpm" 2>/dev/null | head -1 || true)
+          if [ -n "$RPM" ]; then
+            cp "$RPM" "release-assets/${APP_NAME}-${VERSION}-linux-${{ matrix.arch }}.rpm"
+          fi
 
       - name: Package Windows artifacts
         if: matrix.os == 'windows'
-        run: |
-          mkdir -p releases
-          MSI=$(find desktop/src-tauri/target/${{ matrix.target }}/release/bundle/msi -name "*.msi" 2>/dev/null | head -1)
-          if [ -n "$MSI" ]; then
-            cp "$MSI" "releases/${APP_NAME}_${{ matrix.os }}_${{ matrix.arch }}.msi"
-          fi
-          NSIS=$(find desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis -name "*.exe" 2>/dev/null | head -1)
-          if [ -n "$NSIS" ]; then
-            cp "$NSIS" "releases/${APP_NAME}_${{ matrix.os }}_${{ matrix.arch }}_setup.exe"
-          fi
         shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+
+          # MSI installer (updater artifact)
+          MSI=$(find desktop/src-tauri/target/${{ matrix.target }}/release/bundle/msi -name "*.msi" 2>/dev/null | head -1 || true)
+          if [ -n "$MSI" ]; then
+            NEW_MSI="${APP_NAME}-${VERSION}-windows-${{ matrix.arch }}.msi"
+            cp "$MSI" "release-assets/$NEW_MSI"
+            [ -f "$MSI.sig" ] && cp "$MSI.sig" "release-assets/$NEW_MSI.sig"
+            echo "MSI installer: $NEW_MSI"
+          fi
+
+          # NSIS installer
+          NSIS=$(find desktop/src-tauri/target/${{ matrix.target }}/release/bundle/nsis -name "*.exe" 2>/dev/null | head -1 || true)
+          if [ -n "$NSIS" ]; then
+            NEW_NSIS="${APP_NAME}-${VERSION}-windows-${{ matrix.arch }}-setup.exe"
+            cp "$NSIS" "release-assets/$NEW_NSIS"
+            [ -f "$NSIS.sig" ] && cp "$NSIS.sig" "release-assets/$NEW_NSIS.sig"
+          fi
+
+      - name: List release assets
+        shell: bash
+        run: ls -la release-assets/ || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: desktop-${{ matrix.os }}-${{ matrix.arch }}
-          path: releases/*
+          path: release-assets/*
           if-no-files-found: error
 
   release:
+    name: Create Release
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-    
+
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -158,11 +264,77 @@ jobs:
           pattern: desktop-*
           merge-multiple: true
 
+      - name: List downloaded artifacts
+        run: ls -la artifacts/
+
       - name: Generate checksums
         run: |
           cd artifacts
-          sha256sum * > checksums_desktop.txt
-          cat checksums_desktop.txt
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Generate latest.json for updater
+        env:
+          VERSION: ${{ github.event.inputs.version || github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          VERSION_NUM="${VERSION#v}"
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          BASE_URL="https://github.com/$REPO/releases/download/$VERSION"
+
+          # Initialize platform entries
+          declare -A platforms
+
+          cd artifacts
+          for sig in *.sig; do
+            [ -f "$sig" ] || continue
+            base="${sig%.sig}"
+            [ -f "$base" ] || continue
+
+            url="$BASE_URL/$base"
+            sig_content=$(cat "$sig")
+
+            case "$base" in
+              *darwin-aarch64.tar.gz)
+                platforms["darwin-aarch64"]="{\"signature\": \"$sig_content\", \"url\": \"$url\"}" ;;
+              *darwin-x86_64.tar.gz)
+                platforms["darwin-x86_64"]="{\"signature\": \"$sig_content\", \"url\": \"$url\"}" ;;
+              *linux-x86_64.AppImage)
+                platforms["linux-x86_64"]="{\"signature\": \"$sig_content\", \"url\": \"$url\"}" ;;
+              *windows-x86_64.msi)
+                platforms["windows-x86_64"]="{\"signature\": \"$sig_content\", \"url\": \"$url\"}" ;;
+            esac
+          done
+          cd ..
+
+          # Build JSON
+          cat > artifacts/latest.json << EOF
+          {
+            "version": "$VERSION_NUM",
+            "notes": "Release $VERSION",
+            "pub_date": "$PUB_DATE",
+            "platforms": {
+          EOF
+
+          first=true
+          for key in "${!platforms[@]}"; do
+            if [ "$first" = true ]; then
+              first=false
+            else
+              echo "," >> artifacts/latest.json
+            fi
+            echo -n "    \"$key\": ${platforms[$key]}" >> artifacts/latest.json
+          done
+
+          cat >> artifacts/latest.json << EOF
+
+            }
+          }
+          EOF
+
+          echo "Generated latest.json:"
+          cat artifacts/latest.json
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -170,7 +342,23 @@ jobs:
           tag_name: ${{ github.event.inputs.version || github.ref_name }}
           name: AgentShield Desktop ${{ github.event.inputs.version || github.ref_name }}
           draft: true
-          files: |
-            artifacts/*
+          body: |
+            ## AgentShield Desktop ${{ github.event.inputs.version || github.ref_name }}
+
+            Protect your AI-operated workspaces with automatic snapshots.
+
+            ### Downloads
+
+            - **macOS (Apple Silicon)**: `AgentShield-${{ github.event.inputs.version || github.ref_name }}-darwin-aarch64.zip`
+            - **macOS (Intel)**: `AgentShield-${{ github.event.inputs.version || github.ref_name }}-darwin-x86_64.zip`
+            - **Windows**: `AgentShield-${{ github.event.inputs.version || github.ref_name }}-windows-x86_64.msi`
+            - **Linux**: `AgentShield-${{ github.event.inputs.version || github.ref_name }}-linux-x86_64.AppImage`
+
+            ---
+            > **macOS users**: If you see "app is damaged" error, run in terminal:
+            > ```bash
+            > xattr -cr "/Applications/AgentShield.app"
+            > ```
+          files: artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
