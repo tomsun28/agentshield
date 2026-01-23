@@ -91,8 +91,12 @@ jobs:
             process.exit(0);
           }
 
+          console.log('DEBUG: Raw secret length:', raw.length);
+          console.log('DEBUG: Raw secret first 50 chars:', raw.substring(0, 50));
+
           // 1. Remove BOM and normalize line endings
           let content = raw.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').trim();
+          console.log('DEBUG: Normalized content first 50 chars:', content.substring(0, 50));
 
           // 2. Decode if it looks like a base64-wrapped file (no spaces, pure base64)
           //    We check if the *entire* content is base64 and decodes to something containing "untrusted comment"
@@ -102,9 +106,10 @@ jobs:
                if (decoded.includes('untrusted comment:')) {
                  console.log('Detected base64-encoded key file, decoded it.');
                  content = decoded.trim();
+                 console.log('DEBUG: Decoded content first 50 chars:', content.substring(0, 50));
                }
              } catch (e) {
-               // Not base64 encoded file, proceed as raw
+               console.log('DEBUG: Not base64 encoded file, proceeding as raw');
              }
           }
 
@@ -137,15 +142,15 @@ jobs:
           keyPayload = keyPayload.replace(/[\s\r\n]/g, '');
           
           console.log('Key payload extracted (length: ' + keyPayload.length + ')');
+          console.log('DEBUG: Key payload first 50 chars:', keyPayload.substring(0, 50));
 
-          // 5. Output ONLY the raw key payload to GITHUB_ENV directly
-          //    This avoids shell buffering/EOF issues.
+          // 5. Set TAURI_SIGNING_PRIVATE_KEY as a single-line env var
+          //    The Tauri CLI expects a raw base64 string, not multiline.
           const githubEnv = process.env.GITHUB_ENV;
           if (githubEnv) {
-             // Append to GITHUB_ENV with correct multiline syntax
-             // We ensure we add a newline before and after to be safe
-             fs.appendFileSync(githubEnv, `TAURI_SIGNING_PRIVATE_KEY<<EOF\n${keyPayload}\nEOF\n`);
+             fs.appendFileSync(githubEnv, `TAURI_SIGNING_PRIVATE_KEY=${keyPayload}\n`);
              console.log('Tauri signing key prepared and added to GITHUB_ENV');
+             console.log('DEBUG: Wrote to GITHUB_ENV');
           } else {
              console.warn('GITHUB_ENV not defined, cannot export key');
           }
