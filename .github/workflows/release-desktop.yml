@@ -31,18 +31,6 @@ jobs:
             target: aarch64-apple-darwin
             os: darwin
             arch: aarch64
-          - platform: macos-14
-            target: x86_64-apple-darwin
-            os: darwin
-            arch: x86_64
-          - platform: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            os: linux
-            arch: x86_64
-          - platform: windows-latest
-            target: x86_64-pc-windows-msvc
-            os: windows
-            arch: x86_64
 
     runs-on: ${{ matrix.platform }}
 
@@ -97,44 +85,65 @@ jobs:
           node << 'EOF'
           const fs = require('fs');
           
-          const raw = process.env.TAURI_KEY_SECRET || '';
-          if (!raw) process.exit(0);
-
-          // Normalize line endings to \n and trim surrounding whitespace
-          let content = raw.replace(/\r\n/g, '\n').trim();
-          
-          // Case 1: Already has untrusted comment
-          if (content.startsWith('untrusted comment:')) {
-            console.log('Using provided key format');
-            // Ensure single final newline
-            fs.writeFileSync('tauri_signing.key', content + '\n');
-          } else {
-            // Case 2: Try decoding base64 (if user base64 encoded the whole file)
-            let decoded = '';
-            try {
-              decoded = Buffer.from(content, 'base64').toString('utf8').trim();
-            } catch (e) {}
-
-            if (decoded && decoded.startsWith('untrusted comment:')) {
-               console.log('Decoded base64 wrapped key');
-               fs.writeFileSync('tauri_signing.key', decoded + '\n');
-            } else {
-               // Case 3: Treat as raw base64 key part only
-               // Remove all whitespace/newlines from the key itself
-               const cleanKey = content.replace(/[\s\r\n]/g, '');
-               
-               // Basic validation
-               if (/^[A-Za-z0-9+/=]+$/.test(cleanKey)) {
-                 console.log('Constructed key file from raw base64');
-                 // Reconstruct standard Minisign format
-                 const fileContent = `untrusted comment: minisign secret key\n${cleanKey}\n`;
-                 fs.writeFileSync('tauri_signing.key', fileContent);
-               } else {
-                 console.error('::error::TAURI_SIGNING_PRIVATE_KEY format not recognized');
-                 process.exit(1);
-               }
-            }
+          let raw = process.env.TAURI_KEY_SECRET || '';
+          if (!raw) {
+            console.log('No key found in env');
+            process.exit(0);
           }
+
+          // 1. Remove BOM and normalize line endings
+          let content = raw.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').trim();
+
+          // 2. Decode if it looks like a base64-wrapped file (no spaces, pure base64)
+          //    We check if the *entire* content is base64 and decodes to something containing "untrusted comment"
+          if (!content.includes(' ') && !content.includes('\n') && content.length > 50) {
+             try {
+               const decoded = Buffer.from(content, 'base64').toString('utf8');
+               if (decoded.includes('untrusted comment:')) {
+                 console.log('Detected base64-encoded key file, decoded it.');
+                 content = decoded.trim();
+               }
+             } catch (e) {
+               // Not base64 encoded file, proceed as raw
+             }
+          }
+
+          // 3. Extract the key payload
+          //    We look for the line that is NOT the comment.
+          const lines = content.split('\n');
+          let keyPayload = '';
+          
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            if (trimmed.startsWith('untrusted comment:')) continue;
+            
+            // Assume this is the key
+            keyPayload = trimmed;
+            break; 
+          }
+
+          // If no key found yet, maybe the whole string is the key (no comment provided)
+          if (!keyPayload && !content.startsWith('untrusted comment:')) {
+            keyPayload = content.replace(/[\s\n]/g, '');
+          }
+
+          if (!keyPayload) {
+             console.error('::error::Could not extract Tauri secret key payload');
+             process.exit(1);
+          }
+
+          // 4. Sanitize payload (remove all spaces/newlines)
+          keyPayload = keyPayload.replace(/[\s\r\n]/g, '');
+          
+          console.log('Key payload extracted (length: ' + keyPayload.length + ')');
+
+          // 5. Output ONLY the raw key payload
+          //    The previous error "Invalid symbol 32, offset 9" (space) indicates the parser 
+          //    tried to decode "untrusted comment: ..." as base64. 
+          //    Providing just the raw base64 key bypasses this ambiguity.
+          fs.writeFileSync('tauri_signing.key', keyPayload);
+          console.log('Written raw key payload to tauri_signing.key');
           EOF
 
           if [ -f tauri_signing.key ]; then
