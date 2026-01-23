@@ -86,44 +86,63 @@ jobs:
 
       - name: Prepare Tauri signing key
         shell: bash
+        env:
+          TAURI_KEY_SECRET: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
-          if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
+          if [ -z "$TAURI_KEY_SECRET" ]; then
             echo "::warning::TAURI_SIGNING_PRIVATE_KEY not set, updater signatures will be disabled"
             exit 0
           fi
 
-          RAW="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
-          KEY_PATH="$RUNNER_TEMP/tauri_signing.key"
-
-          # Case 1: Original two-line format (starts with "untrusted comment:")
-          if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
-            printf '%s\n' "$RAW" > "$KEY_PATH"
-            echo "Using original two-line key format"
-          else
-            # Case 2: Base64 wrapped (decode to get two lines)
-            if DECODED=$(printf '%s' "$RAW" | base64 --decode 2>/dev/null || printf '%s' "$RAW" | base64 -D 2>/dev/null) \
-               && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
-              printf '%s\n' "$DECODED" > "$KEY_PATH"
-              echo "Decoded base64 wrapped key"
-            else
-              # Case 3: Single line base64 key -> construct two-line file
-              if echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
-                ONE=$(printf '%s' "$RAW" | tr -d '\r\n')
-                printf '%s\n%s\n' "untrusted comment: tauri signing key" "$ONE" > "$KEY_PATH"
-                echo "Constructed two-line file from single-line base64 key"
-              else
-                echo "::error::TAURI_SIGNING_PRIVATE_KEY format not recognized"
-                exit 1
-              fi
-            fi
-          fi
-
-          # Export as raw content for Tauri CLI using multiline env var
-          echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> "$GITHUB_ENV"
-          cat "$KEY_PATH" >> "$GITHUB_ENV"
-          echo "EOF" >> "$GITHUB_ENV"
+          node << 'EOF'
+          const fs = require('fs');
           
-          echo "Tauri signing key prepared"
+          const raw = process.env.TAURI_KEY_SECRET || '';
+          if (!raw) process.exit(0);
+
+          // Normalize line endings to \n and trim surrounding whitespace
+          let content = raw.replace(/\r\n/g, '\n').trim();
+          
+          // Case 1: Already has untrusted comment
+          if (content.startsWith('untrusted comment:')) {
+            console.log('Using provided key format');
+            // Ensure single final newline
+            fs.writeFileSync('tauri_signing.key', content + '\n');
+          } else {
+            // Case 2: Try decoding base64 (if user base64 encoded the whole file)
+            let decoded = '';
+            try {
+              decoded = Buffer.from(content, 'base64').toString('utf8').trim();
+            } catch (e) {}
+
+            if (decoded && decoded.startsWith('untrusted comment:')) {
+               console.log('Decoded base64 wrapped key');
+               fs.writeFileSync('tauri_signing.key', decoded + '\n');
+            } else {
+               // Case 3: Treat as raw base64 key part only
+               // Remove all whitespace/newlines from the key itself
+               const cleanKey = content.replace(/[\s\r\n]/g, '');
+               
+               // Basic validation
+               if (/^[A-Za-z0-9+/=]+$/.test(cleanKey)) {
+                 console.log('Constructed key file from raw base64');
+                 // Reconstruct standard Minisign format
+                 const fileContent = `untrusted comment: minisign secret key\n${cleanKey}\n`;
+                 fs.writeFileSync('tauri_signing.key', fileContent);
+               } else {
+                 console.error('::error::TAURI_SIGNING_PRIVATE_KEY format not recognized');
+                 process.exit(1);
+               }
+            }
+          }
+          EOF
+
+          if [ -f tauri_signing.key ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> "$GITHUB_ENV"
+            cat tauri_signing.key >> "$GITHUB_ENV"
+            echo "EOF" >> "$GITHUB_ENV"
+            echo "Tauri signing key prepared"
+          fi
 
       - name: Build CLI binary
         shell: bash
