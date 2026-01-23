@@ -144,13 +144,19 @@ jobs:
           console.log('Key payload extracted (length: ' + keyPayload.length + ')');
           console.log('DEBUG: Key payload first 50 chars:', keyPayload.substring(0, 50));
 
-          // 5. Set TAURI_SIGNING_PRIVATE_KEY as a single-line env var
-          //    The Tauri CLI expects a raw base64 string, not multiline.
+          // 5. Reconstruct the full 2-line Minisign key format and write to file
+          //    Tauri CLI expects a proper key file, not just the payload
+          const keyFilePath = 'tauri_signing.key';
+          const keyFileContent = `untrusted comment: minisign secret key\n${keyPayload}\n`;
+          fs.writeFileSync(keyFilePath, keyFileContent);
+          console.log('Reconstructed Minisign key file:', keyFilePath);
+          
+          // 6. Set TAURI_SIGNING_PRIVATE_KEY to the file path
           const githubEnv = process.env.GITHUB_ENV;
           if (githubEnv) {
-             fs.appendFileSync(githubEnv, `TAURI_SIGNING_PRIVATE_KEY=${keyPayload}\n`);
-             console.log('Tauri signing key prepared and added to GITHUB_ENV');
-             console.log('DEBUG: Wrote to GITHUB_ENV');
+             fs.appendFileSync(githubEnv, `TAURI_SIGNING_PRIVATE_KEY=${keyFilePath}\n`);
+             console.log('Tauri signing key file path added to GITHUB_ENV');
+             console.log('DEBUG: Wrote file path to GITHUB_ENV');
           } else {
              console.warn('GITHUB_ENV not defined, cannot export key');
           }
