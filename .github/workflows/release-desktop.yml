@@ -98,19 +98,16 @@ jobs:
           # Case 1: Original two-line format (starts with "untrusted comment:")
           if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
             printf '%s\n' "$RAW" > "$KEY_PATH"
-            echo "Using original two-line key format"
           else
             # Case 2: Base64 wrapped (decode to get two lines)
             if DECODED=$(printf '%s' "$RAW" | base64 --decode 2>/dev/null || printf '%s' "$RAW" | base64 -D 2>/dev/null) \
                && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
               printf '%s\n' "$DECODED" > "$KEY_PATH"
-              echo "Decoded base64 wrapped key"
             else
               # Case 3: Single line base64 key -> construct two-line file
               if echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
                 ONE=$(printf '%s' "$RAW" | tr -d '\r\n')
                 printf '%s\n%s\n' "untrusted comment: tauri signing key" "$ONE" > "$KEY_PATH"
-                echo "Constructed two-line file from single-line base64 key"
               else
                 echo "::error::TAURI_SIGNING_PRIVATE_KEY format not recognized"
                 exit 1
@@ -133,7 +130,6 @@ jobs:
           fi
 
           echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
-          echo "Tauri signing key prepared (base64 encoded)"
 
       - name: Build CLI binary
         shell: bash
