@@ -31,10 +31,6 @@ jobs:
             target: aarch64-apple-darwin
             os: darwin
             arch: aarch64
-          - platform: macos-14
-            target: x86_64-apple-darwin
-            os: darwin
-            arch: x86_64
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             os: linux
@@ -225,17 +221,6 @@ jobs:
             cp "$TAR_GZ" "release-assets/$NEW_TAR_GZ"
             [ -f "$TAR_GZ.sig" ] && cp "$TAR_GZ.sig" "release-assets/$NEW_TAR_GZ.sig"
             echo "Updater artifact: $NEW_TAR_GZ"
-          fi
-
-          # Create zip from .app for direct download
-          APP_PATH=$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.app" -type d 2>/dev/null | head -1 || true)
-          if [ -n "$APP_PATH" ]; then
-            APP_NAME_BASE=$(basename "$APP_PATH")
-            NEW_ZIP="${APP_NAME}-${VERSION}-darwin-${{ matrix.arch }}.zip"
-            cd "$(dirname "$APP_PATH")"
-            ditto -c -k --sequesterRsrc --keepParent "$APP_NAME_BASE" "$NEW_ZIP"
-            mv "$NEW_ZIP" "$GITHUB_WORKSPACE/release-assets/"
-            echo "App zip: $NEW_ZIP"
           fi
 
           # Copy DMG if exists
