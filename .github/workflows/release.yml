@@ -46,7 +46,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 9
           run_install: false
 
       - name: Install Bun
@@ -56,12 +56,12 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
       - name: Install Linux dependencies
         if: matrix.os == 'linux'
+        shell: bash
         run: |
+          set -euxo pipefail
           sudo apt-get update
           # Core build tools and pkg-config
           sudo apt-get install -y --no-install-recommends \
@@ -76,9 +76,12 @@ jobs:
             flatpak \
             flatpak-builder \
             elfutils \
-            libfuse2 \
-            librsvg2-dev \
+            libfuse2
+
+          # GTK/GLib stack for gdk-3.0, glib-2.0, gio-2.0
+          sudo apt-get install -y --no-install-recommends \
             libgtk-3-dev \
+            librsvg2-dev \
             libayatana-appindicator3-dev
 
           # WebKit2GTK (version differs across Ubuntu images; try 4.1 then 4.0)
@@ -162,7 +165,8 @@ jobs:
         working-directory: desktop
         env:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm tauri build --target ${{ matrix.target }} --bundles appimage,deb,rpm
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: pnpm tauri build --verbose --bundles appimage,deb,rpm
 
       - name: Build Tauri app (Non-Linux)
         if: matrix.os != 'linux'
