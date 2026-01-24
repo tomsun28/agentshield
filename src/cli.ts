@@ -6,7 +6,7 @@ import { BackupManager } from "./backup.js";
 import { ShieldWatcher } from "./watcher.js";
 import { formatBytes, formatTimeAgo } from "./utils.js";
 
-const SHIELD_VERSION = "0.1.0";
+const SHIELD_VERSION = "0.1.1";
 
 interface CliOptions {
   command: string;

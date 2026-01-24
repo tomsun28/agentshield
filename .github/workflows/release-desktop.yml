@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g., v0.1.0)'
+        description: 'Version tag (e.g., 0.1.0)'
         required: true
         type: string
   push:
@@ -98,19 +98,16 @@ jobs:
           # Case 1: Original two-line format (starts with "untrusted comment:")
           if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
             printf '%s\n' "$RAW" > "$KEY_PATH"
-            echo "Using original two-line key format"
           else
             # Case 2: Base64 wrapped (decode to get two lines)
             if DECODED=$(printf '%s' "$RAW" | base64 --decode 2>/dev/null || printf '%s' "$RAW" | base64 -D 2>/dev/null) \
                && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
               printf '%s\n' "$DECODED" > "$KEY_PATH"
-              echo "Decoded base64 wrapped key"
             else
               # Case 3: Single line base64 key -> construct two-line file
               if echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
                 ONE=$(printf '%s' "$RAW" | tr -d '\r\n')
                 printf '%s\n%s\n' "untrusted comment: tauri signing key" "$ONE" > "$KEY_PATH"
-                echo "Constructed two-line file from single-line base64 key"
               else
                 echo "::error::TAURI_SIGNING_PRIVATE_KEY format not recognized"
                 exit 1
@@ -118,12 +115,21 @@ jobs:
             fi
           fi
 
-          # Export as raw content for Tauri CLI using multiline env var
-          echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> "$GITHUB_ENV"
-          cat "$KEY_PATH" >> "$GITHUB_ENV"
-          echo "EOF" >> "$GITHUB_ENV"
-          
-          echo "Tauri signing key prepared"
+          # Base64 encode the entire key file and set as env var
+          if command -v base64 >/dev/null 2>&1; then
+            KEY_B64=$(base64 < "$KEY_PATH" | tr -d '\r\n')
+          elif command -v openssl >/dev/null 2>&1; then
+            KEY_B64=$(openssl base64 -A -in "$KEY_PATH")
+          else
+            KEY_B64=$(KEY_PATH="$KEY_PATH" node -e "process.stdout.write(require('fs').readFileSync(process.env.KEY_PATH).toString('base64'))")
+          fi
+
+          if [ -z "$KEY_B64" ]; then
+            echo "::error::Failed to generate base64 key content"
+            exit 1
+          fi
+
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
 
       - name: Build CLI binary
         shell: bash
