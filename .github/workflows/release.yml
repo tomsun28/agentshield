@@ -75,7 +75,28 @@ jobs:
         if: matrix.os == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          # Core build tools and pkg-config
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            curl \
+            wget \
+            file \
+            patchelf \
+            libssl-dev \
+            rpm \
+            elfutils \
+            librsvg2-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev
+
+          # WebKit2GTK (version differs across Ubuntu images; try 4.1 then 4.0)
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev \
+            || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
+
+          # libsoup also changed major version; prefer 3.0 with fallback to 2.4
+          sudo apt-get install -y --no-install-recommends libsoup-3.0-dev \
+            || sudo apt-get install -y --no-install-recommends libsoup2.4-dev
 
       - name: Install root dependencies
         run: pnpm install
@@ -149,7 +170,13 @@ jobs:
         working-directory: desktop
         env:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm tauri build --target ${{ matrix.target }}
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "linux" ]; then
+            pnpm tauri build --target ${{ matrix.target }} --bundles appimage,deb,rpm
+          else
+            pnpm tauri build --target ${{ matrix.target }}
+          fi
 
       - name: Package macOS artifacts
         if: matrix.os == 'darwin'
