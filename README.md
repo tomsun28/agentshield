@@ -28,6 +28,11 @@ Download the corresponding platform installation package from the [Releases](htt
 - `shield_desktop_linux_x64.tar.gz` (Linux x64)
 - `shield_desktop_win_x64.exe` (Windows x64)
 
+For MacOS if you see “AgentShield.app is damaged and can’t be opened”, run the following command in Terminal:
+```
+sudo xattr -rd com.apple.quarantine /Applications/AgentShield.app
+```
+
 ### CLI Version
 
 **Via npm installation**

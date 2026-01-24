@@ -28,6 +28,11 @@
 - `shield_desktop_linux_x64.tar.gz` (Linux x64)
 - `shield_desktop_win_x64.exe` (Windows x64)
 
+MacOS 用户若遇到安装包已损坏等提示，可在终端运行以下命令解决：
+```
+sudo xattr -rd com.apple.quarantine /Applications/AgentShield.app
+```
+
 ### CLI 版
 
 **通过 npm 安装**
