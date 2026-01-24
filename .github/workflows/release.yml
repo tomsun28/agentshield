@@ -84,7 +84,29 @@ jobs:
             librsvg2-dev \
             libayatana-appindicator3-dev
 
-          # WebKit2GTK (version differs across Ubuntu images; try 4.1 then 4.0)
+      - name: Workaround ldd failure for Bun binary
+        if: matrix.os == 'linux'
+        run: |
+          # linuxdeploy crashes if ldd returns 1 (e.g. for static/Bun binaries).
+          # We replace ldd with a wrapper that returns 0 for our 'shield' binary.
+          sudo mv /usr/bin/ldd /usr/bin/ldd.real
+          sudo tee /usr/bin/ldd << 'EOF'
+          #!/bin/bash
+          for arg in "$@"; do
+            # Check if the argument ends with /shield (the binary name)
+            if [[ "$arg" == *"/shield" ]]; then
+              exit 0
+            fi
+          done
+          exec /usr/bin/ldd.real "$@"
+          EOF
+          sudo chmod +x /usr/bin/ldd
+
+      - name: Install WebKit2GTK (version differs across Ubuntu images; try 4.1 then 4.0)
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          set -euxo pipefail
           sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev \
             || sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-dev
 
