@@ -166,17 +166,19 @@ jobs:
             bun build --compile --target=bun-linux-x64 ./src/index.ts --outfile desktop/src-tauri/bin/shield
           fi
 
-      - name: Build Tauri app
+      - name: Build Tauri app (Linux)
+        if: matrix.os == 'linux'
         working-directory: desktop
         env:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        shell: bash
-        run: |
-          if [ "${{ matrix.os }}" = "linux" ]; then
-            pnpm tauri build --target ${{ matrix.target }} --bundles appimage,deb,rpm
-          else
-            pnpm tauri build --target ${{ matrix.target }}
-          fi
+        run: pnpm tauri build --target ${{ matrix.target }} --bundles appimage,deb,rpm
+
+      - name: Build Tauri app (Non-Linux)
+        if: matrix.os != 'linux'
+        working-directory: desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build --target ${{ matrix.target }}
 
       - name: Package macOS artifacts
         if: matrix.os == 'darwin'
