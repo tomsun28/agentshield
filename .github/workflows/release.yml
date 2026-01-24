@@ -223,17 +223,6 @@ jobs:
             echo "Updater artifact: $NEW_TAR_GZ"
           fi
 
-          # Create zip from .app for direct download
-          APP_PATH=$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.app" -type d 2>/dev/null | head -1 || true)
-          if [ -n "$APP_PATH" ]; then
-            APP_NAME_BASE=$(basename "$APP_PATH")
-            NEW_ZIP="${APP_NAME}-${VERSION}-darwin-${{ matrix.arch }}.zip"
-            cd "$(dirname "$APP_PATH")"
-            ditto -c -k --sequesterRsrc --keepParent "$APP_NAME_BASE" "$NEW_ZIP"
-            mv "$NEW_ZIP" "$GITHUB_WORKSPACE/release-assets/"
-            echo "App zip: $NEW_ZIP"
-          fi
-
           # Copy DMG if exists
           DMG=$(find "desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg" -name "*.dmg" 2>/dev/null | head -1 || true)
           if [ -n "$DMG" ]; then
