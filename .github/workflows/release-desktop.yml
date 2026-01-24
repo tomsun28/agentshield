@@ -1,4 +1,4 @@
-name: Release Desktop
+name: Release
 
 on:
   workflow_dispatch:
@@ -15,14 +15,14 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-desktop-${{ github.ref_name }}
+  group: release-${{ github.ref_name }}
   cancel-in-progress: true
 
 env:
   APP_NAME: AgentShield
 
 jobs:
-  build:
+  build-desktop:
     strategy:
       fail-fast: false
       matrix:
@@ -252,18 +252,89 @@ jobs:
           path: release-assets/*
           if-no-files-found: error
 
+  build-cli:
+    name: Build CLI
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build CLI binaries
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+
+          # Build targets: target_name:output_file:os:arch:ext
+          TARGETS=(
+            "bun-darwin-arm64:shield:darwin:arm64:tar.gz"
+            "bun-darwin-x64:shield:darwin:amd64:tar.gz"
+            "bun-linux-x64:shield:linux:amd64:tar.gz"
+            "bun-linux-arm64:shield:linux:arm64:tar.gz"
+            "bun-windows-x64:shield.exe:windows:amd64:zip"
+          )
+
+          for target in "${TARGETS[@]}"; do
+            IFS=':' read -r bun_target output_file os arch ext <<< "$target"
+            
+            archive_name="shield_cli_${os}_${arch}.${ext}"
+            echo "🔨 Building CLI for $os/$arch..."
+            
+            # Build binary
+            bun build --compile --target="$bun_target" ./src/index.ts --outfile "$output_file"
+            
+            # Create archive
+            echo "📁 Creating $archive_name..."
+            if [ "$ext" = "zip" ]; then
+              zip -j "release-assets/$archive_name" "$output_file" LICENSE README.md
+            else
+              tar -czvf "release-assets/$archive_name" "$output_file" LICENSE README.md
+            fi
+            
+            # Clean up binary
+            rm -f "$output_file"
+            
+            echo "✅ $archive_name created"
+          done
+
+      - name: List CLI assets
+        run: ls -la release-assets/
+
+      - name: Upload CLI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-binaries
+          path: release-assets/*
+          if-no-files-found: error
+
   release:
     name: Create Release
-    needs: build
+    needs: [build-desktop, build-cli]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
 
     steps:
-      - name: Download all artifacts
+      - name: Download desktop artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
           pattern: desktop-*
+          merge-multiple: true
+
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: cli-binaries
           merge-multiple: true
 
       - name: List downloaded artifacts
@@ -342,19 +413,27 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.version || github.ref_name }}
-          name: AgentShield Desktop ${{ github.event.inputs.version || github.ref_name }}
+          name: AgentShield ${{ github.event.inputs.version || github.ref_name }}
           draft: true
           body: |
-            ## AgentShield Desktop ${{ github.event.inputs.version || github.ref_name }}
+            ## AgentShield ${{ github.event.inputs.version || github.ref_name }}
 
             Protect your AI-operated workspaces with automatic snapshots.
 
-            ### Downloads
+            ### Desktop Application Downloads
 
             - **macOS (Apple Silicon)**: `AgentShield-${{ github.event.inputs.version || github.ref_name }}-darwin-aarch64.zip`
             - **macOS (Intel)**: `AgentShield-${{ github.event.inputs.version || github.ref_name }}-darwin-x86_64.zip`
             - **Windows**: `AgentShield-${{ github.event.inputs.version || github.ref_name }}-windows-x86_64.msi`
             - **Linux**: `AgentShield-${{ github.event.inputs.version || github.ref_name }}-linux-x86_64.AppImage`
+
+            ### CLI Downloads
+
+            - **macOS (Apple Silicon)**: `shield_cli_darwin_arm64.tar.gz`
+            - **macOS (Intel)**: `shield_cli_darwin_amd64.tar.gz`
+            - **Linux (x64)**: `shield_cli_linux_amd64.tar.gz`
+            - **Linux (ARM64)**: `shield_cli_linux_arm64.tar.gz`
+            - **Windows**: `shield_cli_windows_amd64.zip`
 
             ---
             > **macOS users**: If you see "app is damaged" error, run in terminal:
