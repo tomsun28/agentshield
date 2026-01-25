@@ -2,23 +2,31 @@
 
 English | [中文](./README_CN.md)
 
-**The missing safety layer for Claude Code, Cowork, OpenCode and all AI Agents - Your "regret pill" for AI-assisted development.**
+**An Undo Button for AI on Your Local Computer**
 
-A workspace history version management tool that protects your workspace from unintended AI Agent modifications.
+Nowadays, more and more people use Cowork & Claude Code to manipulate files locally.
+It’s powerful — but when AI goes crazy, your workspace can be permanently messed up.
+
+One weekend, after playing football and heading home, an idea suddenly hit me.
+I spent the whole weekend hacking together **AgentShield** — a safety shield for AI-driven agent.
+
+AgentShield protects your workspace in real time. When things go wrong, you can rollback everything with one click. Think of it as a **regret pill for AI.**
+
 
 ![demo](./desktop/demo.png)
 
-## ✨ Features
+### What AgentShield Does
 
-- **⚡ Zero-Copy Backups** - Uses hardlinks for instant, space-efficient backups
-- **🕵️ Real-time Protection** - Watches your workspace and automatically backs up files before changes
-- **📦 Smart Exclusions** - Automatically ignores `.git`, `node_modules`, build artifacts, etc.
-- **🔒 Atomic Exec Mode** - Snapshot entire workspace before running agent commands
-- **⏮️ Easy Restore** - One command to roll back any file to its original state
+- 🛡 Real-time file monitoring & snapshot
+- ⏪ One-click rollback when AI messes things up
+- 💻 Desktop app + CLI, zero-copy, low disk overhead
 
-## 🚀 Installation
+### How It Works (No Coding Required)
 
-### Desktop Version
+1. Download the desktop app [Download here](https://github.com/tomsun28/agentshield/releases)
+2. Select your workspace folder and protect it
+3. Let AI work freely
+4. If disaster happens → Click **Rollback**
 
 Download the corresponding platform installation package from the [Releases](https://github.com/tomsun28/agentshield/releases) page and extract it to install (supports Windows, macOS, Linux).
 
@@ -33,7 +41,14 @@ For MacOS if you see “AgentShield.app is damaged and can’t be opened”, run
 sudo xattr -rd com.apple.quarantine /Applications/AgentShield.app
 ```
 
-### CLI Version
+### Who Is This For?
+
+- Cowork, Claude Code, OpenCode, Eigent and others AI Agent users
+- Designers & writers using AI locally
+- Non-technical users automating workflows
+- Developers running multiple agents 24/7
+
+### And CLI Version
 
 **Via npm installation**
 
@@ -48,63 +63,6 @@ curl -fsSL https://github.com/tomsun28/agentshield/raw/main/install.sh | bash
 ```
 
 Or download the executable binary for your platform from the [Releases](https://github.com/tomsun28/agentshield/releases) page (supports Windows, macOS, Linux).
-
-- `shield_cli_darwin_arm64` (macOS arm64)
-- `shield_cli_darwin_x64` (macOS x64)
-- `shield_cli_linux_arm64` (Linux arm64)
-- `shield_cli_linux_x64` (Linux x64)
-- `shield_cli_win_x64.exe` (Windows x64)
-
-## 📖 Usage
-
-
-### Watch Mode (Workspace Real-time Protection)
-
-> Support background daemon mode `shield start` and foreground mode `shield watch`, choose one.
-
-```bash
-# Start background watch (recommended)
-shield start
-
-# Start background watch for specific directory
-shield start ./my-project
-
-# Watch current directory (foreground)
-shield watch
-
-# Watch specific directory (foreground)
-shield watch ./my-project
-
-# Stop background process
-shield stop
-shield stop ./my-project
-
-# Check status
-shield status
-```
-
-### Restore Files
-
-```bash
-# List all changes and snapshot points
-shield list
-
-# Restore a specific snapshot by ID or timestamp
-shield restore <id>
-```
-
-### Status and Cleanup
-
-```bash
-# Show backup statistics and daemon status
-shield status
-
-# Remove backups older than 7 days (default)
-shield clean
-
-# Remove backups older than 3 days
-shield clean --days=3
-```
 
 ## 🤝 Contributing
 
